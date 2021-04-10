@@ -1,0 +1,19 @@
+version: '3.7'
+services:
+  vq-vae-video:
+    build:
+      context: .
+    shm_size: '10g'
+    image: xuan1918/vq_vae_video:v0.0.1
+    container_name: vq_vae_video
+    privileged: true
+    environment:
+        - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - /data/Projects/data:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
