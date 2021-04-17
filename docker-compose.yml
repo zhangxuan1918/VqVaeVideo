@@ -11,6 +11,7 @@ services:
         - NVIDIA_VISIBLE_DEVICES=all
     volumes:
       - /data/Projects/data:/data
+      - /data/Projects/python:/code
     deploy:
       resources:
         reservations:

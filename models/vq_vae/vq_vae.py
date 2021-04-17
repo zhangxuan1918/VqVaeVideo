@@ -1,3 +1,5 @@
+from functools import partial
+
 from torch import nn
 import torch.nn.functional as F
 
@@ -5,22 +7,23 @@ from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantiz
 
 
 class Encoder(nn.Module):
-    def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
+    def __init__(self, which_conv, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
         super(Encoder, self).__init__()
 
-        self._conv_1 = nn.Conv2d(in_channels=in_channels,
-                                 out_channels=num_hiddens // 2,
-                                 kernel_size=4,
-                                 stride=2, padding=1)
-        self._conv_2 = nn.Conv2d(in_channels=num_hiddens // 2,
-                                 out_channels=num_hiddens,
-                                 kernel_size=4,
-                                 stride=2, padding=1)
-        self._conv_3 = nn.Conv2d(in_channels=num_hiddens,
-                                 out_channels=num_hiddens,
-                                 kernel_size=3,
-                                 stride=1, padding=1)
-        self._residual_stack = ResidualStack(in_channels=num_hiddens,
+        self._conv_1 = which_conv(in_channels=in_channels,
+                                  out_channels=num_hiddens // 2,
+                                  kernel_size=4,
+                                  stride=2, padding=1)
+        self._conv_2 = which_conv(in_channels=num_hiddens // 2,
+                                  out_channels=num_hiddens,
+                                  kernel_size=4,
+                                  stride=2, padding=1)
+        self._conv_3 = which_conv(in_channels=num_hiddens,
+                                  out_channels=num_hiddens,
+                                  kernel_size=3,
+                                  stride=1, padding=1)
+        self._residual_stack = ResidualStack(which_conv=which_conv,
+                                             in_channels=num_hiddens,
                                              num_hiddens=num_hiddens,
                                              num_residual_layers=num_residual_layers,
                                              num_residual_hiddens=num_residual_hiddens)
@@ -37,28 +40,30 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self, in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
+    def __init__(self, which_conv, which_transpose_conv,
+                 in_channels, num_hiddens, num_residual_layers, num_residual_hiddens):
         super(Decoder, self).__init__()
 
-        self._conv_1 = nn.Conv2d(in_channels=in_channels,
-                                 out_channels=num_hiddens,
-                                 kernel_size=3,
-                                 stride=1, padding=1)
+        self._conv_1 = which_conv(in_channels=in_channels,
+                                  out_channels=num_hiddens,
+                                  kernel_size=3,
+                                  stride=1, padding=1)
 
-        self._residual_stack = ResidualStack(in_channels=num_hiddens,
+        self._residual_stack = ResidualStack(which_conv=which_conv,
+                                             in_channels=num_hiddens,
                                              num_hiddens=num_hiddens,
                                              num_residual_layers=num_residual_layers,
                                              num_residual_hiddens=num_residual_hiddens)
 
-        self._conv_trans_1 = nn.ConvTranspose2d(in_channels=num_hiddens,
-                                                out_channels=num_hiddens // 2,
-                                                kernel_size=4,
-                                                stride=2, padding=1)
+        self._conv_trans_1 = which_transpose_conv(in_channels=num_hiddens,
+                                                  out_channels=num_hiddens // 2,
+                                                  kernel_size=4,
+                                                  stride=2, padding=1)
 
-        self._conv_trans_2 = nn.ConvTranspose2d(in_channels=num_hiddens // 2,
-                                                out_channels=3,
-                                                kernel_size=4,
-                                                stride=2, padding=1)
+        self._conv_trans_2 = which_transpose_conv(in_channels=num_hiddens // 2,
+                                                  out_channels=3,
+                                                  kernel_size=4,
+                                                  stride=2, padding=1)
 
     def forward(self, inputs):
         x = self._conv_1(inputs)
@@ -73,23 +78,37 @@ class Decoder(nn.Module):
 
 class VqVae(nn.Module):
     def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens,
-                 num_embeddings, embedding_dim, commitment_cost, decay=0):
+                 num_embeddings, embedding_dim, commitment_cost, decay=0, is_video=False,
+                 embedding_video_depth=1):
         super(VqVae, self).__init__()
 
-        self._encoder = Encoder(3, num_hiddens,
+        self.is_video = is_video
+        if self.is_video:
+            # we use conv3d and convtranspose3d
+            which_conv = nn.Conv3d
+            which_transpose_conv = nn.ConvTranspose3d
+        else:
+            # we use conv2d and convtranspose2d
+            which_conv = nn.Conv2d
+            which_transpose_conv = nn.ConvTranspose2d
+
+        self._encoder = Encoder(which_conv, 3, num_hiddens,
                                 num_residual_layers,
                                 num_residual_hiddens)
-        self._pre_vq_conv = nn.Conv2d(in_channels=num_hiddens,
-                                      out_channels=embedding_dim,
-                                      kernel_size=1,
-                                      stride=1)
+
+        self._pre_vq_conv = which_conv(in_channels=num_hiddens,
+                                       out_channels=embedding_dim,
+                                       kernel_size=1,
+                                       stride=1)
         if decay > 0.0:
-            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim,
+            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim * embedding_video_depth,
                                               commitment_cost, decay)
         else:
-            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim,
+            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim * embedding_video_depth,
                                            commitment_cost)
-        self._decoder = Decoder(embedding_dim,
+        self._decoder = Decoder(which_conv,
+                                which_transpose_conv,
+                                embedding_dim,
                                 num_hiddens,
                                 num_residual_layers,
                                 num_residual_hiddens)
@@ -97,7 +116,17 @@ class VqVae(nn.Module):
     def forward(self, x):
         z = self._encoder(x)
         z = self._pre_vq_conv(z)
-        loss, quantized, perplexity, _ = self._vq_vae(z)
+
+        if self.is_video:
+            # shape of z: [batch_size, 64, 4, 32, 32] -> [batch_size, -1, 32, 32]
+            batch_size, C, D, H, W = z.size()
+            z = z.reshape(batch_size, -1, H, W).contiguous()
+            loss, quantized, perplexity, _ = self._vq_vae(z)
+            # shape of z: [batch_size, -1, 32, 32] -> [batch_size, 64, 4, 32, 32]
+            quantized = quantized.reshape(batch_size, C, D, H, W).contiguous()
+        else:
+            loss, quantized, perplexity, _ = self._vq_vae(z)
+
         x_recon = self._decoder(quantized)
 
         return loss, x_recon, perplexity
