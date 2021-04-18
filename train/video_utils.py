@@ -45,7 +45,8 @@ params = {
     'train_args': {
         'num_steps': 250000,
         'lr': 2e-4,
-        'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d')
+        'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        'data_std': 0.34
     }
 }
 

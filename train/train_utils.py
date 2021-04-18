@@ -54,3 +54,9 @@ def save_checkpoint(folder_name, state, filename='checkpoint.pth.tar'):
     filename = os.path.join(folder_name, filename)
     torch.save(state, filename)
 
+
+def load_checkpoint(checkpoint_path, device_id=0):
+    loc = 'cuda:{}'.format(device_id)
+    checkpoint = torch.load(checkpoint_path, map_location=loc)
+    return checkpoint
+
