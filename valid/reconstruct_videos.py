@@ -1,9 +1,11 @@
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import numpy as np
+from torchvision.utils import make_grid
+
 from models.vq_vae.vq_vae import VqVae
 from train.train_utils import load_checkpoint
 from train.video_utils import video_pipe, list_videos
-from valid.reconstruct_untils import save_images
+from valid.reconstruct_untils import save_images, save_images2
 import torch.nn.functional as F
 import torch
 
@@ -30,18 +32,21 @@ def reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_da
     _, data_recon, _ = model(data)
     recon_error = F.mse_loss(data_recon, data)
     print('reconstruct error: %6.2f' % recon_error)
-    recon = ((torch.clamp(data_recon, -1.0, 1.0).view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
+    recon = ((torch.clip(data_recon, -1.0, 1.0).view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(
+        np.uint8)
     original = ((data.view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
 
-    # for i in range(B):
-    #     # interleave original and reconstructed
-    #     interleaved = np.empty((2 * D, H, W, C), dtype=np.uint8)
-    #     interleaved[0::2, :, :, :] = recon[i]
-    #     interleaved[1::2, :, :, :] = original[i]
-    #
-    #     save_images(interleaved, i)
     for i in range(B):
-        save_images(recon[i], i)
+        # interleave original and reconstructed
+
+        interleaved = np.empty((2 * D, H, W, C), dtype=np.uint8)
+        interleaved[0::2, :, :, :] = recon[i]
+        interleaved[1::2, :, :, :] = original[i]
+
+        save_images(interleaved, i)
+
+    # for i in range(B):
+    #     save_images(recon[i], i)
 
 
 if __name__ == '__main__':

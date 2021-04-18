@@ -11,11 +11,11 @@ params = {
         'decay': 0.99
     },
     'data_args': {
-        'batch_size': 1024
+        'batch_size': 2048
     },
     'train_args': {
-        'num_steps': 3750, # we increase the batch size to reduce the steps
-        'lr': 1e-3,
+        'num_steps': 1875, # we increase the batch size to reduce the steps
+        'lr': 2e-3,
         'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
         'data_std': 0.063287
     }

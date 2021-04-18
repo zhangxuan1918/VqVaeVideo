@@ -1,3 +1,4 @@
+import numpy as np
 from matplotlib import pyplot as plt, gridspec
 
 
@@ -10,4 +11,13 @@ def save_images(images, fig_suffix):
         plt.subplot(gs[j])
         plt.axis("off")
         plt.imshow(images[j])
-    plt.savefig('video_frames_%s.png' % fig_suffix)
+    plt.savefig('images_%s.png' % fig_suffix)
+
+
+def save_images2(img, fig_suffix):
+    npimg = img.numpy()
+    fig = plt.imshow(np.transpose(npimg, (1, 2, 0)), interpolation='nearest')
+    fig.axes.get_xaxis().set_visible(False)
+    fig.axes.get_yaxis().set_visible(False)
+
+    plt.savefig('images_%s.png' % fig_suffix)

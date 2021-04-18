@@ -33,14 +33,14 @@ params = {
     },
     'data_args': {
         'batch_size': 100,
-        'num_threads': 2,
+        'num_threads': 6,
         'device_id': 0,
         'training_data_files': list_videos('/data/GOT_256_144/'),
         'seed': 1987,
         'sequence_length': 16,
         'shard_id': 0,
         'num_shards': 1,
-        'initial_prefetch_size': 16
+        'initial_prefetch_size': 100
     },
     'train_args': {
         'num_steps': 250000,

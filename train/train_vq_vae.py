@@ -2,7 +2,6 @@ import os.path
 import shutil
 import time
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
@@ -15,7 +14,7 @@ from train.train_utils import get_model_size, save_checkpoint, AverageMeter, Pro
 
 class TrainVqVae:
 
-    def __init__(self, model, training_loader, num_steps, lr, folder_name, data_std):
+    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, folder_name, data_std):
 
         self.model = model
         self.training_loader = training_loader
@@ -23,7 +22,7 @@ class TrainVqVae:
         self.num_steps = num_steps
         self.folder_name = folder_name
         self.data_std = data_std
-
+        self.num_iters_epoch = num_iters_epoch
         if os.path.isdir(folder_name):
             shutil.rmtree(folder_name)
         os.mkdir(folder_name)
@@ -41,23 +40,35 @@ class TrainVqVae:
         constr = AverageMeter('Constr', ':6.2f')
         perp = AverageMeter('Perplexity', ':6.2f')
         progress = ProgressMeter(
-            len(self.training_loader),
+            self.num_iters_epoch,
             [batch_time, data_time, losses, constr, perp],
             prefix="Steps: [{}]".format(self.num_steps))
 
+        if self.model.is_video:
+            data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
+        else:
+            data_iter = iter(self.training_loader)
         end = time.time()
         for i in range(self.num_steps):
             # measure output loading time
             data_time.update(time.time() - end)
 
+            try:
+                data = next(data_iter)
+            except StopIteration as e:
+                if self.model.is_video:
+                    data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
+                else:
+                    data_iter = iter(self.training_loader)
+                data = next(data_iter)
+
             if self.model.is_video:
-                data = next(self.training_loader)[0]['data'].float()
+                data = data[0]['data'].float()
                 B, D, H, W, C = data.size()
                 data = data.view(B, C, D, H, W)
                 data = data / 127.5 - 1
             else:
-                data, _ = next(iter(self.training_loader))
-                data = data.to('cuda')
+                data = data[0].to('cuda')
 
             self.optimizer.zero_grad()
 
@@ -86,6 +97,12 @@ class TrainVqVae:
                     'state_dict': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                 }, 'checkpoint%s.pth.tar' % (i + 1))
+        print('saving ...')
+        save_checkpoint(self.folder_name, {
+            'steps': self.num_steps + 1,
+            'state_dict': self.model.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+        }, 'checkpoint%s.pth.tar' % (self.num_steps + 1))
 
 
 def train_images():
@@ -105,7 +122,9 @@ def train_images():
                                      ]))
 
     training_loader = torch.utils.data.DataLoader(training_data, batch_size=data_args['batch_size'], shuffle=True)
-    train_object = TrainVqVae(model=model, training_loader=training_loader, **train_args)
+    num_iters_epoch = len(training_loader)
+    train_object = TrainVqVae(model=model, training_loader=training_loader, num_iters_epoch=num_iters_epoch,
+                              **train_args)
     train_object.train()
 
 
@@ -126,15 +145,15 @@ def train_videos():
                                filenames=data_args['training_data_files'],
                                seed=data_args['seed'])
     training_pipe.build()
-    training_loader = DALIGenericIterator(training_pipe, ['data'])
-    train_object = TrainVqVae(model=model, training_loader=training_loader, **train_args)
+    num_iters_epoch = training_pipe.epoch_size()['__Video_0']
+    train_object = TrainVqVae(model=model, training_loader=training_pipe, num_iters_epoch=num_iters_epoch, **train_args)
     train_object.train()
 
 
 if __name__ == '__main__':
     # original resolution: 1920 x 1080
     # we can scale it down to 256 *144
-    is_video = False
+    is_video = True
 
     if is_video:
         train_videos()
