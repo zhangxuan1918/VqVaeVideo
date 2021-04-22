@@ -79,8 +79,7 @@ class Decoder(nn.Module):
 
 class VqVae(nn.Module):
     def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens,
-                 num_embeddings, embedding_dim, commitment_cost, decay=0, is_video=False,
-                 embedding_video_depth=1):
+                 num_embeddings, embedding_dim, commitment_cost, decay=0, is_video=False):
         super(VqVae, self).__init__()
 
         self.is_video = is_video
@@ -106,11 +105,9 @@ class VqVae(nn.Module):
                                        kernel_size=1,
                                        stride=1)
         if decay > 0.0:
-            self._vq_vae = which_vq_ema(num_embeddings, embedding_dim * embedding_video_depth,
-                                        commitment_cost, decay)
+            self._vq_vae = which_vq_ema(num_embeddings, embedding_dim, commitment_cost, decay)
         else:
-            self._vq_vae = which_vq(num_embeddings, embedding_dim * embedding_video_depth,
-                                    commitment_cost)
+            self._vq_vae = which_vq(num_embeddings, embedding_dim, commitment_cost)
         self._decoder = Decoder(which_conv,
                                 which_transpose_conv,
                                 embedding_dim,
