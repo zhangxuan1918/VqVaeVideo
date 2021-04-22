@@ -60,12 +60,12 @@ if __name__ == '__main__':
         'commitment_cost': 0.25,
         'decay': 0.99
     }
-    model_id = '2021-04-16'
-    checkpoint_file = 'checkpoint2000.pth.tar'
+    model_id = '2021-04-18'
+    checkpoint_file = 'checkpoint62000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
     device_id = 0
     training_data_files = list_videos('/data/GOT_256_144/')
-    batch_size = 8
+    batch_size = 36
     num_threads = 2
-    reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=1987,
+    reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=8,
                 is_video=True)

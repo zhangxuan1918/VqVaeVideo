@@ -14,7 +14,8 @@ from train.train_utils import get_model_size, save_checkpoint, AverageMeter, Pro
 
 class TrainVqVae:
 
-    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, folder_name, data_std):
+    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, folder_name, data_std,
+                 checkpoint_path=None):
 
         self.model = model
         self.training_loader = training_loader
@@ -23,9 +24,22 @@ class TrainVqVae:
         self.folder_name = folder_name
         self.data_std = data_std
         self.num_iters_epoch = num_iters_epoch
-        if os.path.isdir(folder_name):
-            shutil.rmtree(folder_name)
-        os.mkdir(folder_name)
+        if not os.path.exists(folder_name):
+            # shutil.rmtree(folder_name)
+            os.mkdir(folder_name)
+        self.checkpoint_path = checkpoint_path
+
+        if checkpoint_path is not None:
+            # load model from checkpoint
+            loc = 'cuda:0'
+            checkpoint = torch.load(checkpoint_path, map_location=loc)
+            self.model.load_state_dict(checkpoint['state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.start_steps = checkpoint['steps']
+            print("=> loaded checkpoint '{}' (steps {})"
+                  .format(checkpoint_path, self.start_steps))
+        else:
+            self.start_steps = 0
 
     @property
     def optimizer(self):
@@ -49,7 +63,7 @@ class TrainVqVae:
         else:
             data_iter = iter(self.training_loader)
         end = time.time()
-        for i in range(self.num_steps):
+        for i in range(self.start_steps, self.num_steps):
             # measure output loading time
             data_time.update(time.time() - end)
 
@@ -88,7 +102,7 @@ class TrainVqVae:
             end = time.time()
 
             if (i + 1) % 10 == 0:
-                progress.display(i)
+                progress.display(i+1)
 
             if (i + 1) % 1000 == 0:
                 print('saving ...')

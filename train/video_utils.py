@@ -25,7 +25,7 @@ params = {
         'num_hiddens': 128,
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
-        'embedding_dim': 64,
+        'embedding_dim': 256,
         'embedding_video_depth': 4,
         'num_embeddings': 512,
         'commitment_cost': 0.25,
@@ -45,8 +45,10 @@ params = {
     'train_args': {
         'num_steps': 250000,
         'lr': 2e-4,
-        'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'data_std': 0.34
+        # 'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        'folder_name': '/opt/project/data/trained_video/2021-04-18',
+        'data_std': 0.34,
+        'checkpoint_path': '/opt/project/data/train_video/2021-04-18/checkpoint62000.pth.tar'
     }
 }
 

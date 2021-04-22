@@ -3,7 +3,8 @@ from functools import partial
 from torch import nn
 import torch.nn.functional as F
 
-from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer
+from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer, VectorQuantizerDepthEMA, \
+    VectorQuantizerDepth
 
 
 class Encoder(nn.Module):
@@ -87,10 +88,14 @@ class VqVae(nn.Module):
             # we use conv3d and convtranspose3d
             which_conv = nn.Conv3d
             which_transpose_conv = nn.ConvTranspose3d
+            which_vq_ema = VectorQuantizerDepthEMA
+            which_vq = VectorQuantizerDepth
         else:
             # we use conv2d and convtranspose2d
             which_conv = nn.Conv2d
             which_transpose_conv = nn.ConvTranspose2d
+            which_vq_ema = VectorQuantizerEMA
+            which_vq = VectorQuantizer
 
         self._encoder = Encoder(which_conv, 3, num_hiddens,
                                 num_residual_layers,
@@ -101,11 +106,11 @@ class VqVae(nn.Module):
                                        kernel_size=1,
                                        stride=1)
         if decay > 0.0:
-            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim * embedding_video_depth,
-                                              commitment_cost, decay)
+            self._vq_vae = which_vq_ema(num_embeddings, embedding_dim * embedding_video_depth,
+                                        commitment_cost, decay)
         else:
-            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim * embedding_video_depth,
-                                           commitment_cost)
+            self._vq_vae = which_vq(num_embeddings, embedding_dim * embedding_video_depth,
+                                    commitment_cost)
         self._decoder = Decoder(which_conv,
                                 which_transpose_conv,
                                 embedding_dim,
@@ -117,15 +122,9 @@ class VqVae(nn.Module):
         z = self._encoder(x)
         z = self._pre_vq_conv(z)
 
-        if self.is_video:
-            # shape of z: [batch_size, 64, 4, 32, 32] -> [batch_size, -1, 32, 32]
-            batch_size, C, D, H, W = z.size()
-            z = z.reshape(batch_size, -1, H, W).contiguous()
-            loss, quantized, perplexity, _ = self._vq_vae(z)
-            # shape of z: [batch_size, -1, 32, 32] -> [batch_size, 64, 4, 32, 32]
-            quantized = quantized.reshape(batch_size, C, D, H, W).contiguous()
-        else:
-            loss, quantized, perplexity, _ = self._vq_vae(z)
+        # if video shape of z: [batch_size, embedding_dim, depth, height, width]
+        # if image shape of z: [batch_size, embedding_dim, height, width]
+        loss, quantized, perplexity, _ = self._vq_vae(z)
 
         x_recon = self._decoder(quantized)
 

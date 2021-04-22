@@ -14,14 +14,11 @@ class VectorQuantizer(nn.Module):
         self._embedding.weight.data.uniform_(-1 / self._num_embeddings, 1 / self._num_embeddings)
         self._commitment_cost = commitment_cost
 
-    def forward(self, inputs):
-        # convert inputs from BCHW -> BHWC
-        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+    def _forward(self, inputs, flat_input):
+        # inputs: original inputs
+        # flat_input: already flattened shape [-1, self._embedding_dim]
+
         input_shape = inputs.shape
-
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-
         # Calculate distances
         distances = (torch.sum(flat_input ** 2, dim=1, keepdim=True)
                      + torch.sum(self._embedding.weight ** 2, dim=1)
@@ -44,8 +41,32 @@ class VectorQuantizer(nn.Module):
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
 
+        return loss, quantized, perplexity, encodings
+
+    def forward(self, inputs):
+        # convert inputs from BCHW -> BHWC
+        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+
+        # Flatten input
+        flat_input = inputs.view(-1, self._embedding_dim)
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+
         # convert quantized from BHWC -> BCHW
         return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
+
+
+class VectorQuantizerDepth(VectorQuantizer):
+
+    def forward(self, inputs):
+        # convert inputs from BCDHW -> BDHWC
+        inputs = inputs.permute(0, 2, 3, 4, 1).contiguous()
+
+        # Flatten input
+        flat_input = inputs.view(-1, self._embedding_dim)
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+
+        # convert quantized from BDHWC -> BCDHW
+        return loss, quantized.permute(0, 4, 1, 2, 3).contiguous(), perplexity, encodings
 
 
 class VectorQuantizerEMA(nn.Module):
@@ -66,14 +87,10 @@ class VectorQuantizerEMA(nn.Module):
         self._decay = decay
         self._epsilon = epsilon
 
-    def forward(self, inputs):
-        # convert inputs from BCHW -> BHWC
-        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+    def _forward(self, inputs, flat_input):
+        # inputs: original inputs
+        # flat_input: already flattened shape [-1, self._embedding_dim]
         input_shape = inputs.shape
-
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-
         # Calculate distances
         distances = (torch.sum(flat_input ** 2, dim=1, keepdim=True)
                      + torch.sum(self._embedding.weight ** 2, dim=1)
@@ -112,8 +129,33 @@ class VectorQuantizerEMA(nn.Module):
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
 
+        return loss, quantized, perplexity, encodings
+
+    def forward(self, inputs):
+        # convert inputs from BCHW -> BHWC
+        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+        input_shape = inputs.shape
+
+        # Flatten input
+        flat_input = inputs.view(-1, self._embedding_dim)
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+
         # convert quantized from BHWC -> BCHW
         return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
+
+
+class VectorQuantizerDepthEMA(VectorQuantizerEMA):
+
+    def forward(self, inputs):
+        # convert inputs from BCDHW -> BDHWC
+        inputs = inputs.permute(0, 2, 3, 4, 1).contiguous()
+
+        # Flatten input
+        flat_input = inputs.view(-1, self._embedding_dim)
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+
+        # convert quantized from BDHWC -> BCDHW
+        return loss, quantized.permute(0, 4, 1, 2, 3).contiguous(), perplexity, encodings
 
 
 class Residual(nn.Module):
@@ -122,12 +164,12 @@ class Residual(nn.Module):
         self._block = nn.Sequential(
             nn.ReLU(True),
             which_conv(in_channels=in_channels,
-                      out_channels=num_residual_hiddens,
-                      kernel_size=3, stride=1, padding=1, bias=False),
+                       out_channels=num_residual_hiddens,
+                       kernel_size=3, stride=1, padding=1, bias=False),
             nn.ReLU(True),
             which_conv(in_channels=num_residual_hiddens,
-                      out_channels=num_hiddens,
-                      kernel_size=1, stride=1, bias=False)
+                       out_channels=num_hiddens,
+                       kernel_size=1, stride=1, bias=False)
         )
 
     def forward(self, x):
