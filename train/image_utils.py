@@ -19,8 +19,8 @@ params = {
         'num_steps': 250000, # we increase the batch size to reduce the steps
         'lr': 2e-3,
         # 'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_video/2021-04-27',
-        'checkpoint_path': '/opt/project/data/trained_video/2021-04-27/checkpoint50001.pth.tar.pth.tar',
+        'folder_name': '/opt/project/data/trained_image/2021-04-27',
+        'checkpoint_path': '/opt/project/data/trained_image/2021-04-27/checkpoint50001.pth.tar',
         'data_std': 1.0
     }
 }
