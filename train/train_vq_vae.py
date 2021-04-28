@@ -1,14 +1,13 @@
 import os.path
-import shutil
 import time
 
 import torch
 import torch.nn.functional as F
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
-from torchvision import datasets
 from torchvision.transforms import transforms
 
 from models.vq_vae.vq_vae import VqVae
+from train.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter
 
 
@@ -82,7 +81,7 @@ class TrainVqVae:
                 data = data.view(B, C, D, H, W)
                 data = data / 127.5 - 1
             else:
-                data = data[0].to('cuda')
+                data = data.to('cuda')
 
             self.optimizer.zero_grad()
 
@@ -102,7 +101,7 @@ class TrainVqVae:
             end = time.time()
 
             if (i + 1) % 10 == 0:
-                progress.display(i+1)
+                progress.display(i + 1)
 
             if (i + 1) % 1000 == 0:
                 print('saving ...')
@@ -129,13 +128,13 @@ def train_images():
     print('num of trainable parameters: %d' % get_model_size(model))
     print(model)
 
-    training_data = datasets.CIFAR10(root="data", train=True, download=True,
-                                     transform=transforms.Compose([
-                                         transforms.ToTensor(),
-                                         transforms.Normalize((0.5, 0.5, 0.5), (1.0, 1.0, 1.0))
-                                     ]))
-
-    training_loader = torch.utils.data.DataLoader(training_data, batch_size=data_args['batch_size'], shuffle=True)
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+    training_data = ImagesDataset(
+        root_dir=data_args['root_dir'],
+        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+    training_loader = torch.utils.data.DataLoader(
+        training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
     num_iters_epoch = len(training_loader)
     train_object = TrainVqVae(model=model, training_loader=training_loader, num_iters_epoch=num_iters_epoch,
                               **train_args)
@@ -167,7 +166,7 @@ def train_videos():
 if __name__ == '__main__':
     # original resolution: 1920 x 1080
     # we can scale it down to 256 *144
-    is_video = True
+    is_video = False
 
     if is_video:
         train_videos()

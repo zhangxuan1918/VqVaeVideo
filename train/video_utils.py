@@ -26,7 +26,7 @@ params = {
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 256,
-        'num_embeddings': 512,
+        'num_embeddings': 2048,
         'commitment_cost': 0.25,
         'decay': 0.99
     },
@@ -34,20 +34,20 @@ params = {
         'batch_size': 64,
         'num_threads': 6,
         'device_id': 0,
-        'training_data_files': list_videos('/data/GOT_256_144/'),
+        'training_data_files': list_videos('/data/Doraemon/video_clips/'),
         'seed': 1987,
         'sequence_length': 16,
         'shard_id': 0,
         'num_shards': 1,
-        'initial_prefetch_size': 1024
+        'initial_prefetch_size': 10240
     },
     'train_args': {
         'num_steps': 250000,
         'lr': 2e-4,
         'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        # 'folder_name': '/opt/project/data/trained_video/2021-04-18',
-        'data_std': 0.34,
-        # 'checkpoint_path': '/opt/project/data/train_video/2021-04-18/checkpoint62000.pth.tar'
+        # 'folder_name': '/opt/project/data/trained_video/2021-04-22',
+        'data_std': 0.1,
+        # 'checkpoint_path': '/opt/project/data/trained_video/2021-04-22/checkpoint19000.pth.tar'
         'checkpoint_path': None
     }
 }

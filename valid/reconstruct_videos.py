@@ -54,14 +54,13 @@ if __name__ == '__main__':
         'num_hiddens': 128,
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
-        'embedding_dim': 64,
-        'embedding_video_depth': 4,
+        'embedding_dim': 256,
         'num_embeddings': 512,
         'commitment_cost': 0.25,
         'decay': 0.99
     }
-    model_id = '2021-04-18'
-    checkpoint_file = 'checkpoint62000.pth.tar'
+    model_id = '2021-04-22'
+    checkpoint_file = 'checkpoint42000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
     device_id = 0
     training_data_files = list_videos('/data/GOT_256_144/')
