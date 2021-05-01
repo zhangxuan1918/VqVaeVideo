@@ -10,3 +10,4 @@ efficientnet-pytorch==0.7.0
 torchvision
 scikit-learn==0.24.1
 nvidia-pyindex==1.0.8
+dalle-pytorch==0.11.0
