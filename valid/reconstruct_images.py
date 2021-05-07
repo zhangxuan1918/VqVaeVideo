@@ -60,8 +60,8 @@ if __name__ == '__main__':
     data_args = params['data_args']
     data_args['batch_size'] = 16
 
-    model_id = '2021-04-27'
-    checkpoint_file = 'checkpoint117000.pth.tar'
+    model_id = '2021-05-01'
+    checkpoint_file = 'checkpoint250001.pth.tar'
     checkpoint_path = '/opt/project/data/trained_image/%s/%s' % (model_id, checkpoint_file)
     batch_size = 16
     reconstruct_images(checkpoint_path, data_args, model_args, is_video=False)

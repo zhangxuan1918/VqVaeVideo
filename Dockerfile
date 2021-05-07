@@ -6,3 +6,6 @@ RUN python -m pip install -r requirements.txt
 RUN rm requirements.txt
 
 RUN pip install --extra-index-url https://developer.download.nvidia.com/compute/redist --upgrade nvidia-dali-cuda110
+
+# install dalle
+RUN pip install git+https://github.com/openai/DALL-E.git

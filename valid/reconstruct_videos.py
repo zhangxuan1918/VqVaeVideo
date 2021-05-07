@@ -4,7 +4,7 @@ from torchvision.utils import make_grid
 
 from models.vq_vae.vq_vae import VqVae
 from train.train_utils import load_checkpoint
-from train.video_utils import video_pipe, list_videos
+from train.video_utils import video_pipe, list_videos, list_videos2
 from valid.reconstruct_untils import save_images, save_images2
 import torch.nn.functional as F
 import torch
@@ -24,17 +24,29 @@ def reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_da
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
+    std = torch.as_tensor([0.229, 0.224, 0.225], device='cuda')
+    std_inv = 1.0 / (std + 1e-7)
+
+    mean = torch.as_tensor([0.485, 0.456, 0.406], device='cuda')
+    mean_inv = -mean * std_inv
+
+    std = std.view(-1, 1, 1, 1)
+    std_inv = std_inv.view(-1, 1, 1, 1)
+    mean = mean.view(-1, 1, 1, 1)
+    mean_inv = mean_inv.view(-1, 1, 1, 1)
+
     data = next(training_loader)[0]['data'].float()
     B, D, H, W, C = data.size() # batch size = 1
     data = data.view(B, C, D, H, W)
     data = data / 127.5 - 1
+    data.sub_(mean).div_(std)
 
     _, data_recon, _ = model(data)
     recon_error = F.mse_loss(data_recon, data)
     print('reconstruct error: %6.2f' % recon_error)
-    recon = ((torch.clip(data_recon, -1.0, 1.0).view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(
-        np.uint8)
-    original = ((data.view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
+    recon = ((torch.clip(data_recon.sub_(mean_inv).div_(std_inv), -1.0, 1.0).view(B, D, H, W, C).cpu().detach().numpy()
+              + 1) * 127.5).astype(np.uint8)
+    original = ((data.sub_(mean_inv).div_(std_inv).view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
 
     for i in range(B):
         # interleave original and reconstructed
@@ -55,16 +67,16 @@ if __name__ == '__main__':
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 256,
-        'num_embeddings': 512,
+        'num_embeddings': 8192,
         'commitment_cost': 0.25,
         'decay': 0.99
     }
-    model_id = '2021-04-22'
-    checkpoint_file = 'checkpoint42000.pth.tar'
+    model_id = '2021-05-06'
+    checkpoint_file = 'checkpoint35000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
     device_id = 0
-    training_data_files = list_videos('/data/GOT_256_144/')
-    batch_size = 36
+    training_data_files = list_videos2('/data/Doraemon/video_clips/')
+    batch_size = 16
     num_threads = 2
     reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=8,
                 is_video=True)

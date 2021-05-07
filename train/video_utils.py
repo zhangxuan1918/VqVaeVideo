@@ -20,21 +20,34 @@ def list_videos(video_folder):
     return files
 
 
+def list_videos2(video_folder):
+    """
+    folder structure
+    parent_folder
+        - video1
+        - video2
+    :return:
+    """
+
+    files = [os.path.join(video_folder, f2) for f2 in os.listdir(video_folder) if f2.endswith('mp4')]
+    return files
+
+
 params = {
     'model_args': {
         'num_hiddens': 128,
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 256,
-        'num_embeddings': 2048,
+        'num_embeddings': 8192,
         'commitment_cost': 0.25,
         'decay': 0.99
     },
     'data_args': {
-        'batch_size': 64,
+        'batch_size': 16,
         'num_threads': 6,
         'device_id': 0,
-        'training_data_files': list_videos('/data/Doraemon/video_clips/'),
+        'training_data_files': list_videos2('/data/Doraemon/video_clips/'),
         'seed': 1987,
         'sequence_length': 16,
         'shard_id': 0,
@@ -43,10 +56,10 @@ params = {
     },
     'train_args': {
         'num_steps': 250000,
-        'lr': 2e-4,
+        'lr': 1e-3,
+        'lr_decay': 0.98,
         'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
         # 'folder_name': '/opt/project/data/trained_video/2021-04-22',
-        'data_std': 0.1,
         # 'checkpoint_path': '/opt/project/data/trained_video/2021-04-22/checkpoint19000.pth.tar'
         'checkpoint_path': None
     }

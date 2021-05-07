@@ -13,15 +13,15 @@ from train.train_utils import get_model_size, save_checkpoint, AverageMeter, Pro
 
 class TrainVqVae:
 
-    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, folder_name, data_std,
+    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, lr_decay, folder_name,
                  checkpoint_path=None):
 
         self.model = model
         self.training_loader = training_loader
         self.lr = lr
+        self.lr_decay = lr_decay
         self.num_steps = num_steps
         self.folder_name = folder_name
-        self.data_std = data_std
         self.num_iters_epoch = num_iters_epoch
         if not os.path.exists(folder_name):
             # shutil.rmtree(folder_name)
@@ -34,6 +34,7 @@ class TrainVqVae:
             checkpoint = torch.load(checkpoint_path, map_location=loc)
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
+            self.scheduler.load_state_dict(checkpoint['scheduler'])
             self.start_steps = checkpoint['steps']
             print("=> loaded checkpoint '{}' (steps {})"
                   .format(checkpoint_path, self.start_steps))
@@ -43,6 +44,10 @@ class TrainVqVae:
     @property
     def optimizer(self):
         return torch.optim.Adam(self.model.parameters(), lr=self.lr, amsgrad=False)
+
+    @property
+    def scheduler(self):
+        return torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay)
 
     def train(self):
         self.model.train()
@@ -62,6 +67,11 @@ class TrainVqVae:
         else:
             data_iter = iter(self.training_loader)
         end = time.time()
+
+        mean = torch.as_tensor([0.485, 0.456, 0.406], device='cuda')
+        mean = mean.view(-1, 1, 1, 1)
+        std = torch.as_tensor([0.229, 0.224, 0.225], device='cuda')
+        std = std.view(-1, 1, 1, 1)
         for i in range(self.start_steps, self.num_steps):
             # measure output loading time
             data_time.update(time.time() - end)
@@ -80,13 +90,14 @@ class TrainVqVae:
                 B, D, H, W, C = data.size()
                 data = data.view(B, C, D, H, W)
                 data = data / 127.5 - 1
+                data.sub_(mean).div_(std)
             else:
                 data = data.to('cuda')
 
             self.optimizer.zero_grad()
 
             vq_loss, data_recon, perplexity = self.model(data)
-            recon_error = F.mse_loss(data_recon, data) / self.data_std
+            recon_error = F.mse_loss(data_recon, data)
             loss = recon_error + vq_loss
             loss.backward()
 
@@ -109,12 +120,17 @@ class TrainVqVae:
                     'steps': i + 1,
                     'state_dict': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
+                    'scheduler': self.scheduler.state_dict(),
                 }, 'checkpoint%s.pth.tar' % (i + 1))
+
+                self.scheduler.step()
+
         print('saving ...')
         save_checkpoint(self.folder_name, {
             'steps': self.num_steps + 1,
             'state_dict': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict(),
         }, 'checkpoint%s.pth.tar' % (self.num_steps + 1))
 
 
@@ -166,7 +182,7 @@ def train_videos():
 if __name__ == '__main__':
     # original resolution: 1920 x 1080
     # we can scale it down to 256 *144
-    is_video = False
+    is_video = True
 
     if is_video:
         train_videos()
