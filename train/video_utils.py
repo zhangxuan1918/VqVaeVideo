@@ -39,12 +39,13 @@ params = {
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 256,
+        'embedding_mul': 4, # after encoder, the time dimension is 4, thus, the quantizer embedding dim = embedding_dim * embedding_mul
         'num_embeddings': 8192,
         'commitment_cost': 0.25,
         'decay': 0.99
     },
     'data_args': {
-        'batch_size': 16,
+        'batch_size': 48,
         'num_threads': 6,
         'device_id': 0,
         'training_data_files': list_videos2('/data/Doraemon/video_clips/'),
@@ -58,10 +59,10 @@ params = {
         'num_steps': 250000,
         'lr': 1e-3,
         'lr_decay': 0.98,
-        'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        # 'folder_name': '/opt/project/data/trained_video/2021-04-22',
-        # 'checkpoint_path': '/opt/project/data/trained_video/2021-04-22/checkpoint19000.pth.tar'
-        'checkpoint_path': None
+        # 'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        'folder_name': '/opt/project/data/trained_video/2021-05-08',
+        'checkpoint_path': '/opt/project/data/trained_video/2021-05-08/checkpoint25000.pth.tar',
+        # 'checkpoint_path': None
     }
 }
 

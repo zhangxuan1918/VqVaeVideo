@@ -1,10 +1,9 @@
 from functools import partial
 
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
-from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer, VectorQuantizerDepthEMA, \
-    VectorQuantizerDepth
+from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer
 
 
 class Encoder(nn.Module):
@@ -79,7 +78,7 @@ class Decoder(nn.Module):
 
 class VqVae(nn.Module):
     def __init__(self, num_hiddens, num_residual_layers, num_residual_hiddens,
-                 num_embeddings, embedding_dim, commitment_cost, decay=0, is_video=False):
+                 num_embeddings, embedding_dim, embedding_mul, commitment_cost, decay=0, is_video=False):
         super(VqVae, self).__init__()
 
         self.is_video = is_video
@@ -87,14 +86,10 @@ class VqVae(nn.Module):
             # we use conv3d and convtranspose3d
             which_conv = nn.Conv3d
             which_transpose_conv = nn.ConvTranspose3d
-            which_vq_ema = VectorQuantizerDepthEMA
-            which_vq = VectorQuantizerDepth
         else:
             # we use conv2d and convtranspose2d
             which_conv = nn.Conv2d
             which_transpose_conv = nn.ConvTranspose2d
-            which_vq_ema = VectorQuantizerEMA
-            which_vq = VectorQuantizer
 
         self._encoder = Encoder(which_conv, 3, num_hiddens,
                                 num_residual_layers,
@@ -105,9 +100,10 @@ class VqVae(nn.Module):
                                        kernel_size=1,
                                        stride=1)
         if decay > 0.0:
-            self._vq_vae = which_vq_ema(num_embeddings, embedding_dim, commitment_cost, decay)
+            self._vq_vae = VectorQuantizerEMA(num_embeddings, embedding_dim * embedding_mul, commitment_cost, decay, is_video=is_video)
         else:
-            self._vq_vae = which_vq(num_embeddings, embedding_dim, commitment_cost)
+            self._vq_vae = VectorQuantizer(num_embeddings, embedding_dim * embedding_mul, commitment_cost, is_video=is_video)
+
         self._decoder = Decoder(which_conv,
                                 which_transpose_conv,
                                 embedding_dim,

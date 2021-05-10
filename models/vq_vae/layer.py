@@ -1,10 +1,20 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
+from einops import rearrange
 
 
 class VectorQuantizer(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost):
+
+    def __init__(self, num_embeddings, embedding_dim, commitment_cost, is_video=False):
+        # if is_video = False => we are dealing with image
+        # input shape: [B, C, H, W]
+        # embedding_dim = C
+
+        # if is_video = True => we are dealing with video
+        # input shape: [B, C, D, H, W]
+        # embedding_dim = C * D
+
         super(VectorQuantizer, self).__init__()
 
         self._embedding_dim = embedding_dim
@@ -14,11 +24,22 @@ class VectorQuantizer(nn.Module):
         self._embedding.weight.data.uniform_(-1 / self._num_embeddings, 1 / self._num_embeddings)
         self._commitment_cost = commitment_cost
 
-    def _forward(self, inputs, flat_input):
-        # inputs: original inputs
-        # flat_input: already flattened shape [-1, self._embedding_dim]
+        self._is_video = is_video
+        if is_video:
+            self._p_depth_last = 'b c d h w -> b h w c d'
+            self._p_space_last = 'b h w c d -> b c d h w'
+            self._p_group = 'b h w c d -> (b h w) (c d)'
+            self._p_flatten = '(b h w) (c d) -> b h w c d'
+        else:
+            self._p_depth_last = 'b c h w -> b h w c'
+            self._p_space_last = 'b h w c -> b c h w'
+            self._p_group = 'b h w c -> (b h w) c'
+            self._p_flatten = '(b h w) c -> b h w c'
 
-        input_shape = inputs.shape
+    def _forward(self, inputs, flat_input, **kwargs):
+        # inputs shape: [b h w c d] or [b h w c]
+        # flat_input shape: already flattened shape [b*h*w, c * d] or [b*h*w, c]
+
         # Calculate distances
         distances = (torch.sum(flat_input ** 2, dim=1, keepdim=True)
                      + torch.sum(self._embedding.weight ** 2, dim=1)
@@ -30,7 +51,8 @@ class VectorQuantizer(nn.Module):
         encodings.scatter_(1, encoding_indices, 1)
 
         # Quantize and unflatten
-        quantized = torch.matmul(encodings, self._embedding.weight).view(input_shape)
+        quantized = rearrange(torch.matmul(encodings, self._embedding.weight), self._p_flatten,
+                              **kwargs)
 
         # Loss
         e_latent_loss = F.mse_loss(quantized.detach(), inputs)
@@ -44,33 +66,42 @@ class VectorQuantizer(nn.Module):
         return loss, quantized, perplexity, encodings
 
     def forward(self, inputs):
-        # convert inputs from BCHW -> BHWC
-        inputs = inputs.permute(0, 2, 3, 1).contiguous()
+        # convert inputs from BCDHW -> BHWCD or BCHW -> BHWC
+        inputs = rearrange(inputs, self._p_depth_last)
+        # convert inputs from BHWCD -> (BxHxW)(CxD) or BHWC -> (BxHxW)C
+        flat_input = rearrange(inputs, self._p_group)
 
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+        if self._is_video:
+            kwargs = {
+                'b': inputs.size()[0],
+                'h': inputs.size()[1],
+                'w': inputs.size()[2],
+                'c': inputs.size()[3],
+                'd': inputs.size()[4],
+            }
+        else:
+            kwargs = {
+                'b': inputs.size()[0],
+                'h': inputs.size()[1],
+                'w': inputs.size()[2],
+                'c': inputs.size()[3]
+            }
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input, **kwargs)
 
-        # convert quantized from BHWC -> BCHW
-        return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
-
-
-class VectorQuantizerDepth(VectorQuantizer):
-
-    def forward(self, inputs):
-        # convert inputs from BCDHW -> BDHWC
-        inputs = inputs.permute(0, 2, 3, 4, 1).contiguous()
-
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
-
-        # convert quantized from BDHWC -> BCDHW
-        return loss, quantized.permute(0, 4, 1, 2, 3).contiguous(), perplexity, encodings
+        # convert quantized from BHWCD -> BCDHW or BHWC -> BCHW
+        quantized = rearrange(quantized, self._p_flatten)
+        return loss, quantized, perplexity, encodings
 
 
 class VectorQuantizerEMA(nn.Module):
-    def __init__(self, num_embeddings, embedding_dim, commitment_cost, decay, epsilon=1e-5):
+    def __init__(self, num_embeddings, embedding_dim, commitment_cost, decay, epsilon=1e-5, is_video=False):
+        # if is_video = False => we are dealing with image
+        # input shape: [B, C, H, W]
+        # embedding_dim = C
+
+        # if is_video = True => we are dealing with video
+        # input shape: [B, C, D, H, W]
+        # embedding_dim = C * D
         super(VectorQuantizerEMA, self).__init__()
 
         self._embedding_dim = embedding_dim
@@ -87,10 +118,23 @@ class VectorQuantizerEMA(nn.Module):
         self._decay = decay
         self._epsilon = epsilon
 
-    def _forward(self, inputs, flat_input):
-        # inputs: original inputs
-        # flat_input: already flattened shape [-1, self._embedding_dim]
-        input_shape = inputs.shape
+        self._is_video = is_video
+        if is_video:
+            self._p_depth_last = 'b c d h w -> b h w c d'
+            self._p_space_last = 'b h w c d -> b c d h w'
+            self._p_group = 'b h w c d -> (b h w) (c d)'
+            self._p_flatten = '(b h w) (c d) -> b h w c d'
+        else:
+            self._p_depth_last = 'b c h w -> b h w c'
+            self._p_space_last = 'b h w c -> b c h w'
+            self._p_group = 'b h w c -> (b h w) c'
+            self._p_flatten = '(b h w) c -> b h w c'
+
+    def _forward(self, inputs, flat_input, **kwargs):
+        # inputs shape: [b h w c d] or [b h w c]
+        # flat_input shape: already flattened shape [b*h*w, c * d] or [b*h*w, c]
+
+
         # Calculate distances
         distances = (torch.sum(flat_input ** 2, dim=1, keepdim=True)
                      + torch.sum(self._embedding.weight ** 2, dim=1)
@@ -102,7 +146,8 @@ class VectorQuantizerEMA(nn.Module):
         encodings.scatter_(1, encoding_indices, 1)
 
         # Quantize and unflatten
-        quantized = torch.matmul(encodings, self._embedding.weight).view(input_shape)
+        quantized = rearrange(torch.matmul(encodings, self._embedding.weight), self._p_flatten,
+                              **kwargs)
 
         # Use EMA to update the embedding vectors
         if self.training:
@@ -132,30 +177,31 @@ class VectorQuantizerEMA(nn.Module):
         return loss, quantized, perplexity, encodings
 
     def forward(self, inputs):
-        # convert inputs from BCHW -> BHWC
-        inputs = inputs.permute(0, 2, 3, 1).contiguous()
-        input_shape = inputs.shape
+        # convert inputs from BCDHW -> BHWCD or BCHW -> BHWC
+        inputs = rearrange(inputs, self._p_depth_last)
+        # convert inputs from BHWCD -> (BxHxW)(CxD) or BHWC -> (BxHxW)C
+        flat_input = rearrange(inputs, self._p_group)
 
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
+        if self._is_video:
+            kwargs = {
+                'b': inputs.size()[0],
+                'h': inputs.size()[1],
+                'w': inputs.size()[2],
+                'c': inputs.size()[3],
+                'd': inputs.size()[4],
+            }
+        else:
+            kwargs = {
+                'b': inputs.size()[0],
+                'h': inputs.size()[1],
+                'w': inputs.size()[2],
+                'c': inputs.size()[3]
+            }
+        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input, **kwargs)
 
-        # convert quantized from BHWC -> BCHW
-        return loss, quantized.permute(0, 3, 1, 2).contiguous(), perplexity, encodings
-
-
-class VectorQuantizerDepthEMA(VectorQuantizerEMA):
-
-    def forward(self, inputs):
-        # convert inputs from BCDHW -> BDHWC
-        inputs = inputs.permute(0, 2, 3, 4, 1).contiguous()
-
-        # Flatten input
-        flat_input = inputs.view(-1, self._embedding_dim)
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input)
-
-        # convert quantized from BDHWC -> BCDHW
-        return loss, quantized.permute(0, 4, 1, 2, 3).contiguous(), perplexity, encodings
+        # convert quantized from BHWCD -> BCDHW or BHWC -> BCHW
+        quantized = rearrange(quantized, self._p_space_last)
+        return loss, quantized, perplexity, encodings
 
 
 class Residual(nn.Module):

@@ -6,6 +6,7 @@ params = {
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 512,
+        'embedding_mul': 1, # used only by video
         'num_embeddings': 8192,
         'commitment_cost': 0.25,
         'decay': 0.99

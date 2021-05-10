@@ -1,7 +1,7 @@
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import numpy as np
 from torchvision.utils import make_grid
-
+from einops import rearrange
 from models.vq_vae.vq_vae import VqVae
 from train.train_utils import load_checkpoint
 from train.video_utils import video_pipe, list_videos, list_videos2
@@ -37,23 +37,25 @@ def reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_da
 
     data = next(training_loader)[0]['data'].float()
     B, D, H, W, C = data.size() # batch size = 1
-    data = data.view(B, C, D, H, W)
+    data = rearrange(data, 'b d h w c -> b c d h w')
     data = data / 127.5 - 1
     data.sub_(mean).div_(std)
 
     _, data_recon, _ = model(data)
     recon_error = F.mse_loss(data_recon, data)
     print('reconstruct error: %6.2f' % recon_error)
-    recon = ((torch.clip(data_recon.sub_(mean_inv).div_(std_inv), -1.0, 1.0).view(B, D, H, W, C).cpu().detach().numpy()
-              + 1) * 127.5).astype(np.uint8)
-    original = ((data.sub_(mean_inv).div_(std_inv).view(B, D, H, W, C).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
+    recon = rearrange(torch.clip(data_recon.sub_(mean_inv).div_(std_inv), -1.0, 1.0), 'b c d h w -> b d h w c')
+    original = rearrange(data.sub_(mean_inv).div_(std_inv), 'b c d h w -> b d h w c')
 
     for i in range(B):
         # interleave original and reconstructed
 
         interleaved = np.empty((2 * D, H, W, C), dtype=np.uint8)
-        interleaved[0::2, :, :, :] = recon[i]
-        interleaved[1::2, :, :, :] = original[i]
+        recon_one = ((recon[i] + 1) * 127.5).cpu().detach().numpy().astype(np.uint8)
+        orig_one = ((original[i] + 1) * 127.5).cpu().detach().numpy().astype(np.uint8)
+
+        interleaved[0::2, :, :, :] = recon_one
+        interleaved[1::2, :, :, :] = orig_one
 
         save_images(interleaved, i)
 
@@ -67,16 +69,17 @@ if __name__ == '__main__':
         'num_residual_hiddens': 32,
         'num_residual_layers': 2,
         'embedding_dim': 256,
+        'embedding_mul': 4,
         'num_embeddings': 8192,
         'commitment_cost': 0.25,
         'decay': 0.99
     }
-    model_id = '2021-05-06'
-    checkpoint_file = 'checkpoint35000.pth.tar'
+    model_id = '2021-05-08'
+    checkpoint_file = 'checkpoint46000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
     device_id = 0
     training_data_files = list_videos2('/data/Doraemon/video_clips/')
     batch_size = 16
     num_threads = 2
-    reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=8,
+    reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=60,
                 is_video=True)
