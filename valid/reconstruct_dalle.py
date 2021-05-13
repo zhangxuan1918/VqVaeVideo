@@ -50,17 +50,17 @@ if __name__ == '__main__':
     encoder_dalle = load_model("/opt/project/data/dall-e/encoder.pkl", 'cuda')
     decoder_dalle = load_model("/opt/project/data/dall-e/decoder.pkl", 'cuda')
 
-    folder = '/opt/project/valid/data'
-    filename = 'image8.jpg'
+    folder = '/opt/project/valid/data2'
+    filename = 'image-35081.png'
     x = load_image(os.path.join(folder, filename))
     recon_x = reconstruct_with_dalle(x, encoder_dalle, decoder_dalle, do_preprocess=True)
 
     recon_x.save(os.path.join(folder, filename.split('.')[0] + '_recon.jpg'))
 
-    print('encoder:')
-    print(encoder_dalle)
-    print('encoder size', get_model_size(encoder_dalle))
-
-    print('decoder:')
-    print(decoder_dalle)
-    print('decoder size', get_model_size(decoder_dalle))
+    # print('encoder:')
+    # print(encoder_dalle)
+    # print('encoder size', get_model_size(encoder_dalle))
+    #
+    # print('decoder:')
+    # print(decoder_dalle)
+    # print('decoder size', get_model_size(decoder_dalle))
