@@ -33,7 +33,7 @@ def check_dalle(images_dir, dalle_encoder, dalle_decoder, batch_size=4, num_work
         x_org = x_org.to('cuda')
         x = map_pixels(x_org)
         z_logits = dalle_encoder(x)
-        z = torch.argmax(z_logits, axis=1)
+        z = torch.argmax(z_logits, dim=1)
         z = F.one_hot(z, num_classes=dalle_encoder.vocab_size).permute(0, 3, 1, 2).float()
 
         x_stats = dalle_decoder(z).float()
@@ -66,24 +66,23 @@ def get_dalle_codes(images_dir, numpy_dir, dalle_encoder, batch_size=256, num_wo
         x = x.to('cuda')
         x = map_pixels(x)
         z_logits = dalle_encoder(x)
-        z = z_logits.cpu().detach().numpy()
+        z = torch.argmax(z_logits, axis=1)
+        z = z.cpu().detach().numpy()
 
         for f, a in zip(filenames, z):
             p = os.path.join(numpy_dir, f)
-            np.save(p, a)
-            # np.savez_compressed(p, z=a)
-        break
+            # np.save(p, a)
+            np.savez_compressed(p, z=a)
 
 
 def check_np(numpy_dir, dalle_encoder, dalle_decoder, batch_size=16):
     np_files = os.listdir(numpy_dir)
     batch_size = min(batch_size, len(np_files))
-    np_array = np.empty((batch_size, dalle_encoder.vocab_size, 32, 32))
+    np_array = np.empty((batch_size, 32, 32))
     for i in range(batch_size):
-        np_array[i] = np.load(os.path.join(numpy_dir, np_files[i]))
+        np_array[i] = np.load(os.path.join(numpy_dir, np_files[i]))['z']
 
-    z_logits = torch.from_numpy(np_array).float().to('cuda')
-    z = torch.argmax(z_logits, axis=1)
+    z = torch.from_numpy(np_array).to(torch.int64).to('cuda')
     z = F.one_hot(z, num_classes=dalle_encoder.vocab_size).permute(0, 3, 1, 2).float()
 
     x_stats = dalle_decoder(z).float()

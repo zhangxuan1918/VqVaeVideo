@@ -2,14 +2,14 @@ import datetime
 
 params = {
     'model_args': {
-        'num_hiddens': 128,
-        'num_residual_hiddens': 32,
-        'num_residual_layers': 2,
-        'embedding_dim': 512,
-        'embedding_mul': 1, # used only by video
-        'num_embeddings': 8192,
-        'commitment_cost': 0.25,
-        'decay': 0.99
+        'n_hid': 128,
+        'n_blk_per_group': 2,
+        'input_channels': 128,
+        'vocab_size': 8192,
+        'requires_grad': True,
+        'use_mixed_precision': True,
+        'n_init': 128,
+        'output_channels': 128
     },
     'data_args': {
         'batch_size': 64,

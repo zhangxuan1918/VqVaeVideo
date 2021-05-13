@@ -1,28 +1,32 @@
 import os.path
 import time
+from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+from dall_e import load_model
+from torch import nn
 from torchvision.transforms import transforms
 
-from models.vq_vae.vq_vae import VqVae
+from models.vq_vae.dalle.vqvae import VqVae
 from train.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter
 
 
 class TrainVqVae:
 
-    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, lr_decay, folder_name,
-                 checkpoint_path=None):
+    def __init__(self, model: nn.Module, dalle_embed: nn.Module, training_loader: torch.utils.data.DataLoader,
+                 num_steps: int, lr: float, lr_decay: float, folder_name: str,
+                 checkpoint_path: str = None):
 
         self.model = model
+        self.dalle_embed = dalle_embed
         self.training_loader = training_loader
         self.lr = lr
         self.lr_decay = lr_decay
         self.num_steps = num_steps
         self.folder_name = folder_name
-        self.num_iters_epoch = num_iters_epoch
+
         if not os.path.exists(folder_name):
             # shutil.rmtree(folder_name)
             os.mkdir(folder_name)
@@ -51,6 +55,7 @@ class TrainVqVae:
 
     def train(self):
         self.model.train()
+        self.dalle_embed.eval()
 
         batch_time = AverageMeter('Time', ':6.3f')
         data_time = AverageMeter('Data', ':6.3f')
@@ -58,53 +63,42 @@ class TrainVqVae:
         constr = AverageMeter('Constr', ':6.2f')
         perp = AverageMeter('Perplexity', ':6.2f')
         progress = ProgressMeter(
-            self.num_iters_epoch,
+            len(self.training_loader),
             [batch_time, data_time, losses, constr, perp],
             prefix="Steps: [{}]".format(self.num_steps))
 
-        if self.model.is_video:
-            data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
-        else:
-            data_iter = iter(self.training_loader)
+        data_iter = iter(self.training_loader)
         end = time.time()
 
-        mean = torch.as_tensor([0.485, 0.456, 0.406], device='cuda')
-        mean = mean.view(-1, 1, 1, 1)
-        std = torch.as_tensor([0.229, 0.224, 0.225], device='cuda')
-        std = std.view(-1, 1, 1, 1)
         for i in range(self.start_steps, self.num_steps):
             # measure output loading time
             data_time.update(time.time() - end)
 
             try:
-                data = next(data_iter)
-            except StopIteration as e:
-                if self.model.is_video:
-                    data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
-                else:
-                    data_iter = iter(self.training_loader)
-                data = next(data_iter)
+                z = next(data_iter)
+            except StopIteration:
+                z = next(data_iter)
 
-            if self.model.is_video:
-                data = data[0]['data'].float()
-                B, D, H, W, C = data.size()
-                data = data.view(B, C, D, H, W)
-                data = data / 127.5 - 1
-                data.sub_(mean).div_(std)
-            else:
-                data = data.to('cuda')
+            # data is indices
+            z = z.to(torch.int64).to('cuda')
+            # one hot encoding, dall-e vocab size 8192
+            # shape [b, 32, 32] -> [b, 8192, 32, 32]
+            z = F.one_hot(z, num_classes=8192).permute(0, 3, 1, 2).float()
+            # embed indices to codes
+            # shape [b, 8192, 32, 32] -> [b, 128, 32, 32]
+            z = self.dalle_embed(z)
 
             self.optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity = self.model(data)
-            recon_error = F.mse_loss(data_recon, data)
-            loss = recon_error + vq_loss
+            z_recon, loss_kl_div = self.model(z)
+            loss_recon = F.mse_loss(z_recon, z)
+            loss = loss_recon + loss_kl_div
             loss.backward()
 
             self.optimizer.step()
 
-            constr.update(recon_error.item(), 1)
-            perp.update(perplexity.item(), 1)
+            constr.update(loss_recon.item(), 1)
+            perp.update(loss_kl_div.item(), 1)
             losses.update(loss.item(), 1)
 
             # measure elapsed time
@@ -140,51 +134,23 @@ def train_images():
     train_args = params['train_args']
     model_args = params['model_args']
 
-    model = VqVae(is_video=False, **model_args).to('cuda')
+    model = VqVae(**model_args).to('cuda')
     print('num of trainable parameters: %d' % get_model_size(model))
     print(model)
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    # the input layer of dalle decoder is used to embed indices to codes, code dim = 128
+    dalle_decoder = load_model("/opt/project/data/dall-e/decoder.pkl").to('cuda')
+    dalle_embed = nn.Sequential(OrderedDict([('embed', list(dalle_decoder.children())[0][0])]))
+
     training_data = ImagesDataset(
         root_dir=data_args['root_dir'],
-        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+        transform=transforms.ToTensor())
     training_loader = torch.utils.data.DataLoader(
         training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
-    num_iters_epoch = len(training_loader)
-    train_object = TrainVqVae(model=model, training_loader=training_loader, num_iters_epoch=num_iters_epoch,
-                              **train_args)
-    train_object.train()
 
-
-def train_videos():
-    from video_utils import video_pipe, params
-
-    data_args = params['data_args']
-    train_args = params['train_args']
-    model_args = params['model_args']
-
-    model = VqVae(is_video=True, **model_args).to('cuda')
-    print('num of trainable parameters: %d' % get_model_size(model))
-    print(model)
-
-    training_pipe = video_pipe(batch_size=data_args['batch_size'],
-                               num_threads=data_args['num_threads'],
-                               device_id=data_args['device_id'],
-                               filenames=data_args['training_data_files'],
-                               seed=data_args['seed'])
-    training_pipe.build()
-    num_iters_epoch = training_pipe.epoch_size()['__Video_0']
-    train_object = TrainVqVae(model=model, training_loader=training_pipe, num_iters_epoch=num_iters_epoch, **train_args)
+    train_object = TrainVqVae(model=model, dalle_embed=dalle_embed, training_loader=training_loader, **train_args)
     train_object.train()
 
 
 if __name__ == '__main__':
-    # original resolution: 1920 x 1080
-    # we can scale it down to 256 *144
-    is_video = True
-
-    if is_video:
-        train_videos()
-    else:
-        train_images()
+    train_images()
