@@ -15,13 +15,14 @@ class DecoderBlock(nn.Module):
 
     device: torch.device = attr.ib(default=None)
     requires_grad: bool = attr.ib(default=False)
+    use_float16: bool = attr.ib(default=True)
 
     def __attrs_post_init__(self) -> None:
         super().__init__()
         self.n_hid = self.n_out // 4
         self.post_gain = 1 / (self.n_layers ** 2)
 
-        make_conv = partial(Conv2d, device=self.device, requires_grad=self.requires_grad)
+        make_conv = partial(Conv2d, device=self.device, requires_grad=self.requires_grad, use_float16=self.use_float16)
         self.id_path = make_conv(self.n_in, self.n_out, 1) if self.n_in != self.n_out else nn.Identity()
         self.res_path = nn.Sequential(OrderedDict([
             ('relu_1', nn.ReLU()),
@@ -55,9 +56,10 @@ class DecoderDalle(nn.Module):
 
         blk_range = range(self.n_blk_per_group)
         n_layers = self.group_count * self.n_blk_per_group
-        make_conv = partial(Conv2d, device=self.device, requires_grad=self.requires_grad)
-        make_blk = partial(DecoderBlock, n_layers=n_layers, device=self.device,
-                           requires_grad=self.requires_grad)
+        make_conv = partial(Conv2d, device=self.device, requires_grad=self.requires_grad,
+                            use_float16=self.use_mixed_precision)
+        make_blk = partial(DecoderBlock, n_layers=n_layers, device=self.device, requires_grad=self.requires_grad,
+                           use_float16=self.use_mixed_precision)
 
         self.blocks = nn.Sequential(OrderedDict([
             ('input', make_conv(self.vocab_size, self.n_init, 1, use_float16=False)),

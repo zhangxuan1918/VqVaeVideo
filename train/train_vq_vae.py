@@ -9,7 +9,7 @@ from torch import nn
 from torchvision.transforms import transforms
 
 from models.vq_vae.dalle.vqvae import VqVae
-from train.data_util import ImagesDataset
+from train.data_util import NumpyDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter
 
 
@@ -142,9 +142,7 @@ def train_images():
     dalle_decoder = load_model("/opt/project/data/dall-e/decoder.pkl").to('cuda')
     dalle_embed = nn.Sequential(OrderedDict([('embed', list(dalle_decoder.children())[0][0])]))
 
-    training_data = ImagesDataset(
-        root_dir=data_args['root_dir'],
-        transform=transforms.ToTensor())
+    training_data = NumpyDataset(root_dir=data_args['root_dir'])
     training_loader = torch.utils.data.DataLoader(
         training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
 

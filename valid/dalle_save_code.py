@@ -1,10 +1,13 @@
 # pass image in and save the code as a numpy array
 import os
+from collections import OrderedDict
+
 import torchvision.transforms as T
 import torch.nn.functional as F
 import torch
 from dall_e import map_pixels, unmap_pixels, load_model
 import numpy as np
+from torch import nn
 from torchvision.utils import make_grid
 
 from train.data_util import ImagesDataset
@@ -36,6 +39,30 @@ def check_dalle(images_dir, dalle_encoder, dalle_decoder, batch_size=4, num_work
         z = torch.argmax(z_logits, dim=1)
         z = F.one_hot(z, num_classes=dalle_encoder.vocab_size).permute(0, 3, 1, 2).float()
 
+        x_stats = dalle_decoder(z).float()
+        x_rec = unmap_pixels(torch.sigmoid(x_stats[:, :3]))
+
+        save_images2(make_grid(x_rec.cpu().data), 'recon')
+        save_images2(make_grid(x_org.cpu().data), 'orig')
+
+        break
+
+def check_dalle2(images_dir, dalle_encoder, dalle_decoder, batch_size=4, num_workers=6):
+    image_data = ImagesDatasetWFilename(root_dir=images_dir, transform=T.ToTensor())
+    image_loader = torch.utils.data.DataLoader(image_data, batch_size=batch_size, shuffle=True,
+                                               num_workers=num_workers)
+    layers = list(dalle_decoder.children())[0]
+    dalle_embed = nn.Sequential(OrderedDict([('embed', layers[0])]))
+    dalle_decoder = nn.Sequential(*layers[1:])
+
+    for _, x_org in image_loader:
+        x_org = x_org.to('cuda')
+        x = map_pixels(x_org)
+        z_logits = dalle_encoder(x)
+        z = torch.argmax(z_logits, dim=1)
+        z = F.one_hot(z, num_classes=dalle_encoder.vocab_size).permute(0, 3, 1, 2).float()
+
+        z = dalle_embed(z)
         x_stats = dalle_decoder(z).float()
         x_rec = unmap_pixels(torch.sigmoid(x_stats[:, :3]))
 
@@ -93,12 +120,12 @@ def check_np(numpy_dir, dalle_encoder, dalle_decoder, batch_size=16):
 
 if __name__ == '__main__':
     images_dir = '/data/Doraemon/images'
-    dalle_encoder = load_model("/opt/project/data/dall-e/encoder.pkl", 'cuda')
-    dalle_decoder = load_model("/opt/project/data/dall-e/decoder.pkl", 'cuda')
+    dalle_encoder = load_model("/opt/project/data/dall-e/encoder.pkl").to('cuda')
+    dalle_decoder = load_model("/opt/project/data/dall-e/decoder.pkl").to('cuda')
 
-    # check_dalle(images_dir, dalle_encoder, dalle_decoder, batch_size=16)
+    check_dalle2(images_dir, dalle_encoder, dalle_decoder, batch_size=16)
 
-    numpy_dir = '/data/Doraemon/np_arrays'
-    get_dalle_codes(images_dir, numpy_dir, dalle_encoder, batch_size=16, num_workers=6)
+    # numpy_dir = '/data/Doraemon/np_arrays'
+    # get_dalle_codes(images_dir, numpy_dir, dalle_encoder, batch_size=16, num_workers=6)
 
     # check_np(numpy_dir, dalle_encoder, dalle_decoder, batch_size=32)
