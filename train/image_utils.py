@@ -2,14 +2,12 @@ import datetime
 
 params = {
     'model_args': {
-        'n_hid': 128,
+        'n_hid': 256,
         'n_blk_per_group': 2,
-        'input_channels': 128,
         'vocab_size': 8192,
         'requires_grad': True,
         'use_mixed_precision': False,
         'n_init': 128,
-        'output_channels': 128,
         'device': 'cuda:0'
     },
     'data_args': {
