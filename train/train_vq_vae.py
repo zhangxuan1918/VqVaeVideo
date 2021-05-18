@@ -91,7 +91,7 @@ class TrainVqVae:
             except StopIteration:
                 images = next(data_iter)
             images = images.to('cuda')
-            is_recs = i > 0 and i % 1000 == 0
+            is_recs = i % 1000 == 0
             self.optimizer.zero_grad()
             images_recs, loss_rec, loss_kl = self.model(images, temperature, kl_weight, is_recs)
             loss = loss_rec + loss_kl
@@ -121,15 +121,14 @@ class TrainVqVae:
 
                 self.scheduler.step()
 
-                if self.run_wandb:
-                    logs = train_visualize(
-                        model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
-                        image_recs=images_recs)
-
                 temperature = max(temperature * math.exp(-self.temp_anneal_rate * i), self.temp_end)
                 kl_weight = min(kl_weight + self.kl_anneal_rate * i, self.kl_weight_end)
 
-            if i % 20 == 0:
+                logs = train_visualize(
+                    model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
+                    image_recs=images_recs[:self.n_images_save])
+
+            if i > 0 and i % 20 == 0:
                 logs = {
                     **logs,
                     'iter': i,

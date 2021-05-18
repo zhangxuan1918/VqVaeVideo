@@ -32,5 +32,5 @@ params = {
         # 'checkpoint_path': '/opt/project/data/trained_image/2021-05-01/checkpoint136000.pth.tar',
         'checkpoint_path': None
     },
-    'use_wandb': False
+    'use_wandb': True
 }
