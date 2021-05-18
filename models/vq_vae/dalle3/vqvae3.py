@@ -1,17 +1,19 @@
+import math
 from collections import OrderedDict
-from typing import Iterator
+from typing import Iterator, List
 from functools import partial
 from itertools import chain
 import attr
 import torch
 import torch.nn.functional as F
 from dall_e import load_model
+from einops import rearrange
 from torch import nn, Tensor
 from torch.nn import Parameter
 
 from models.vq_vae.dalle.decoder import DecoderBlock
 from models.vq_vae.dalle.encoder import EncoderBlock
-from models.vq_vae.dalle.utils import Conv2d
+from models.vq_vae.dalle.utils import Conv2d, map_pixels, unmap_pixels
 
 
 @attr.s(eq=False, repr=False)
@@ -28,6 +30,8 @@ class VqVae3:
     device: torch.device = attr.ib(default=torch.device('cpu'))
     requires_grad: bool = attr.ib(default=False)
     use_mixed_precision: bool = attr.ib(default=True)
+
+    straight_through: bool = attr.ib(default=False)
 
     def __attrs_post_init__(self):
         super().__init__()
@@ -100,6 +104,7 @@ class VqVae3:
         [B, 3, 255, 255] -> [B, 4, 4]
         :return:
         """
+        x = map_pixels(x)
         # z shape: [B, 2048, 32, 32]
         z = self.dalle_encoder(x)
         # z shape: [B, 8192, 4, 4]
@@ -118,7 +123,9 @@ class VqVae3:
         # x shape: [B, 128, 32, 32]
         x = self.decoder(z)
         # x shape: [B, 6, 256, 256]
-        x = self.dalle_decoder(x)
+        x = self.dalle_decoder(x).float()
+
+        x = unmap_pixels(torch.sigmoid(x[:, :3]))
         return x
 
     def __str__(self) -> str:
@@ -145,21 +152,57 @@ class VqVae3:
         self.encoder.eval()
         self.decoder.eval()
 
-    def forward(self, x) -> Tensor:
+    def forward(self, images: Tensor, temperature: float = 0.9, kl_weight: float = 0.0,
+                is_recs: bool = False) -> List[Tensor]:
         # x must be first mapped using map_pixels
+        x = map_pixels(images)
 
         # encoding
         # z shape: [B, 3, 256, 256] -> [B, 2048, 32, 32]
         z = self.dalle_encoder(x)
+
         # z shape: [B, 2048, 32, 32] -> [B, 8192, 4, 4]
-        z = self.encoder(z)
+        z_logits = self.encoder(z).float()
+        # z_logits = self.encoder(z)
+
+        # soft one hot encoding using gumbel softmax
+        soft_one_hot = F.gumbel_softmax(z_logits, tau=temperature, dim=1, hard=self.straight_through)
 
         # decoding
         # x shape: [B, 8192, 4, 4] -> [B, 128, 32, 32]
-        x_ = self.decoder(z)
-        # x shape: [B, 128, 32, 32] -> [B, 6, 256, 256]
-        x_ = self.dalle_decoder(x_)
-        return x_
+        x_ = self.decoder(soft_one_hot)
 
-    def __call__(self, x):
-        return self.forward(x)
+        # x shape: [B, 128, 32, 32] -> [B, 6, 256, 256]
+        x_ = self.dalle_decoder(x_).float()
+        # x_ = self.dalle_decoder(x_)
+
+        loss_rec = self.loss_rec(x, x_)
+        loss_kl = self.kl_loss(z_logits) if kl_weight > 0.0 else torch.tensor(0.0)
+
+        images_recs = unmap_pixels(torch.sigmoid(x_[:, :3])) if is_recs else x_
+        return images_recs, loss_rec, loss_kl * kl_weight / 192.
+
+    def __call__(self, x, *args, **kwargs):
+        return self.forward(x, *args, **kwargs)
+
+    def loss_rec(self, images_org: Tensor, images_rec: Tensor) -> Tensor:
+        # # https://arxiv.org/pdf/2102.12092.pdf: A.3. The Logit-Laplace Distribution
+        # the loss can be negative
+        # loss = torch.abs(torch.logit(images_org) - images_rec[:, :3]) / torch.exp(images_rec[:, 3:]) \
+        #         + images_rec[:, 3:] + torch.log(images_org) + torch.log(1.0 - images_org) + math.log(2.0)
+        loss = torch.abs(torch.logit(images_org) - images_rec[:, :3]) / torch.exp(images_rec[:, 3:]) \
+               + images_rec[:, 3:] + math.log(2.0)
+        return torch.mean(loss)
+
+        # # try mse, the loss is very small
+        # return F.mse_loss(images_org, images_rec[:, :3])
+
+        # # try smoothed l1,
+        # return F.smooth_l1_loss(images_org, images_rec[:, :3])
+
+    def kl_loss(self, logits):
+        logits = rearrange(logits, 'b c h w -> b (h w) c')
+        log_codes = F.log_softmax(logits, dim=-1)
+        log_uniform = torch.log(torch.tensor([1. / self.vocab_size], device=self.device))
+        kl_div = F.kl_div(log_uniform, log_codes, None, None, 'batchmean', log_target=True)
+        return kl_div

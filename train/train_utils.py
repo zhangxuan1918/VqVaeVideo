@@ -1,10 +1,18 @@
 import os
+from typing import Union, Dict
 
 import numpy as np
 import torch
+import wandb
+from torch import Tensor, nn
+from torchvision.utils import make_grid
+from wandb.sdk.lib import RunDisabled
+from wandb.sdk.wandb_run import Run
+
+from models.vq_vae.dalle3.vqvae3 import VqVae3
 
 
-def get_model_size(model):
+def get_model_size(model: nn.Module) -> int:
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     return sum([np.prod(p.size()) for p in model_parameters])
 
@@ -20,7 +28,7 @@ class ProgressMeter(object):
         entries += [str(meter) for meter in self.meters]
         print('\t'.join(entries))
 
-    def _get_batch_fmtstr(self, num_batches):
+    def _get_batch_fmtstr(self, num_batches) -> str:
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
@@ -50,13 +58,28 @@ class AverageMeter(object):
         return fmtstr.format(**self.__dict__)
 
 
-def save_checkpoint(folder_name, state, filename='checkpoint.pth.tar'):
+def save_checkpoint(folder_name: str, state: dict, filename: str ='checkpoint.pth.tar'):
     filename = os.path.join(folder_name, filename)
     torch.save(state, filename)
 
 
-def load_checkpoint(checkpoint_path, device_id=0):
+def load_checkpoint(checkpoint_path: str, device_id: int =0):
     loc = 'cuda:{}'.format(device_id)
     checkpoint = torch.load(checkpoint_path, map_location=loc)
     return checkpoint
 
+
+def train_visualize(model: VqVae3, n_images: int, images: Tensor, image_recs: Tensor) -> Dict:
+    z = model.encode(images)
+    x_hard_recs = model.decode(z)
+
+    images, recs, hard_recs, codes = map(lambda t: t.detach().cpu(), (images, image_recs, x_hard_recs, z))
+    images, recs, hard_recs = map(lambda t: make_grid(t.float(), nrow=int(n_images), normalize=True, range=(-1, 1)),
+                                  (images, recs, hard_recs))
+
+    return {
+        'sampled images': wandb.Image(images, caption='original images'),
+        'reconstructions': wandb.Image(recs, caption='reconstructions'),
+        'hard reconstructions': wandb.Image(hard_recs, caption='hard reconstructions'),
+        'codebook_indices': wandb.Histogram(codes)
+    }
