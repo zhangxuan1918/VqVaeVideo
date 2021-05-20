@@ -91,7 +91,7 @@ class TrainVqVae:
             except StopIteration:
                 images = next(data_iter)
             images = images.to('cuda')
-            is_recs = i % 1000 == 0
+            is_recs = i > 0 and i % 1000 == 0
             self.optimizer.zero_grad()
             images_recs, loss_rec, loss_kl = self.model(images, temperature, kl_weight, is_recs)
             loss = loss_rec + loss_kl
@@ -106,7 +106,6 @@ class TrainVqVae:
             batch_time.update(time.time() - end)
             end = time.time()
 
-            logs = {}
             if i > 0 and i % 1000 == 0:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
@@ -124,26 +123,27 @@ class TrainVqVae:
                 temperature = max(temperature * math.exp(-self.temp_anneal_rate * i), self.temp_end)
                 kl_weight = min(kl_weight + self.kl_anneal_rate * i, self.kl_weight_end)
 
-                logs = train_visualize(
-                    model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
-                    image_recs=images_recs[:self.n_images_save])
-
-            if i > 0 and i % 20 == 0:
-                logs = {
-                    **logs,
-                    'iter': i,
-                    'loss': meter_loss.val,
-                    'loss_recs': meter_recs_loss.val,
-                    'loss_recs_avg': meter_recs_loss.avg,
-                    # 'loss_kl': meter_kl_loss.val,
-                    # 'loss_kl_avg': meter_kl_loss.avg,
-                    'lr': self.scheduler.get_last_lr(),
-                    'temp': temperature,
-                    # 'kl_weight': kl_weight
-                }
-                progress.display(i)
                 if self.run_wandb:
+                    logs = train_visualize(
+                        model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
+                        image_recs=images_recs[:self.n_images_save])
+
+                    logs = {
+                        **logs,
+                        # 'iter': i,
+                        # 'loss': meter_loss.val,
+                        'loss_recs': meter_recs_loss.val,
+                        'loss_recs_avg': meter_recs_loss.avg,
+                        # 'loss_kl': meter_kl_loss.val,
+                        # 'loss_kl_avg': meter_kl_loss.avg,
+                        'lr': self.scheduler.get_last_lr(),
+                        'temp': temperature,
+                        # 'kl_weight': kl_weight
+                    }
                     self.run_wandb.log(logs)
+
+            if i % 100 == 0:
+                progress.display(i)
 
         print('saving ...')
         save_checkpoint(self.folder_name, {
@@ -155,6 +155,8 @@ class TrainVqVae:
             'temperature': temperature,
             'kl_weight': kl_weight,
         }, 'checkpoint%s.pth.tar' % self.num_steps)
+
+        self.run_wandb.finish()
 
 
 def train_images():

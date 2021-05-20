@@ -22,7 +22,7 @@ params = {
 
         'temp_start': 1.0,
         'temp_end': 1 / 16,
-        'temp_anneal_rate': -2e-5,
+        'temp_anneal_rate': 2e-5,
         'kl_weight_start': 0.0,
         'kl_weight_end': 0.0,
         'kl_anneal_rate': 0.00132,
