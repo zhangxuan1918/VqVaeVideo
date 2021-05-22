@@ -1,9 +1,7 @@
-from functools import partial
-
 import torch.nn.functional as F
 from torch import nn
 
-from models.vq_vae.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer
+from models.vq_vae.dalle0.layer import ResidualStack, VectorQuantizerEMA, VectorQuantizer
 
 
 class Encoder(nn.Module):

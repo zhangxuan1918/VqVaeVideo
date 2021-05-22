@@ -1,43 +1,48 @@
 import os.path
 import time
+from typing import Union
 
 import torch
 import torch.nn.functional as F
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+import attr
+import wandb
 from torchvision.transforms import transforms
+from wandb.sdk.lib import RunDisabled
+from wandb.sdk.wandb_run import Run
 
-from models.vq_vae.vq_vae import VqVae
+from models.vq_vae.dalle0.vq_vae import VqVae
 from train.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter
 
 
+@attr.s(eq=False, repr=False)
 class TrainVqVae:
+    model: nn.Module = attr.ib()
+    training_loader: torch.utils.data.DataLoader = attr.ib()
+    run_wandb: Union[Run, RunDisabled, None] = attr.ib()
+    num_steps: int = attr.ib()
+    lr: float = attr.ib()
+    lr_decay: float = attr.ib()
+    folder_name: str = attr.ib()
+    checkpoint_path: str = attr.ib(default=None)
+    n_images_save: int = attr.ib(default=4)
 
-    def __init__(self, model, training_loader, num_steps, num_iters_epoch, lr, lr_decay, folder_name,
-                 checkpoint_path=None):
+    def __attrs_post_init__(self):
 
-        self.model = model
-        self.training_loader = training_loader
-        self.lr = lr
-        self.lr_decay = lr_decay
-        self.num_steps = num_steps
-        self.folder_name = folder_name
-        self.num_iters_epoch = num_iters_epoch
-        if not os.path.exists(folder_name):
+        if not os.path.exists(self.folder_name):
             # shutil.rmtree(folder_name)
-            os.mkdir(folder_name)
-        self.checkpoint_path = checkpoint_path
+            os.mkdir(self.folder_name)
 
-        if checkpoint_path is not None:
+        if self.checkpoint_path is not None:
             # load model from checkpoint
             loc = 'cuda:0'
-            checkpoint = torch.load(checkpoint_path, map_location=loc)
+            checkpoint = torch.load(self.checkpoint_path, map_location=loc)
             self.model.load_state_dict(checkpoint['state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.scheduler.load_state_dict(checkpoint['scheduler'])
             self.start_steps = checkpoint['steps']
             print("=> loaded checkpoint '{}' (steps {})"
-                  .format(checkpoint_path, self.start_steps))
+                  .format(self.checkpoint_path, self.start_steps))
         else:
             self.start_steps = 0
 
@@ -54,76 +59,72 @@ class TrainVqVae:
 
         batch_time = AverageMeter('Time', ':6.3f')
         data_time = AverageMeter('Data', ':6.3f')
-        losses = AverageMeter('Loss', ':.4e')
-        constr = AverageMeter('Constr', ':6.2f')
-        perp = AverageMeter('Perplexity', ':6.2f')
+        meter_loss = AverageMeter('Loss', ':.4e')
+        meter_loss_constr = AverageMeter('Constr', ':6.2f')
+        meter_loss_perp = AverageMeter('Perplexity', ':6.2f')
         progress = ProgressMeter(
-            self.num_iters_epoch,
-            [batch_time, data_time, losses, constr, perp],
+            len(self.training_loader),
+            [batch_time, data_time, meter_loss, meter_loss_constr, meter_loss_perp],
             prefix="Steps: [{}]".format(self.num_steps))
 
-        if self.model.is_video:
-            data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
-        else:
-            data_iter = iter(self.training_loader)
+        data_iter = iter(self.training_loader)
         end = time.time()
 
-        mean = torch.as_tensor([0.485, 0.456, 0.406], device='cuda')
-        mean = mean.view(-1, 1, 1, 1)
-        std = torch.as_tensor([0.229, 0.224, 0.225], device='cuda')
-        std = std.view(-1, 1, 1, 1)
         for i in range(self.start_steps, self.num_steps):
             # measure output loading time
             data_time.update(time.time() - end)
 
             try:
-                data = next(data_iter)
-            except StopIteration as e:
-                if self.model.is_video:
-                    data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
-                else:
-                    data_iter = iter(self.training_loader)
-                data = next(data_iter)
+                images = next(data_iter)
+            except StopIteration:
+                data_iter = iter(self.training_loader)
+                images = next(data_iter)
 
-            if self.model.is_video:
-                data = data[0]['data'].float()
-                B, D, H, W, C = data.size()
-                data = data.view(B, C, D, H, W)
-                data = data / 127.5 - 1
-                data.sub_(mean).div_(std)
-            else:
-                data = data.to('cuda')
-
+            images = images.to('cuda')
             self.optimizer.zero_grad()
 
-            vq_loss, data_recon, perplexity = self.model(data)
-            recon_error = F.mse_loss(data_recon, data)
+            vq_loss, images_recon, perplexity = self.model(images)
+            recon_error = F.mse_loss(images_recon, images)
             loss = recon_error + vq_loss
             loss.backward()
 
             self.optimizer.step()
 
-            constr.update(recon_error.item(), 1)
-            perp.update(perplexity.item(), 1)
-            losses.update(loss.item(), 1)
+            meter_loss_constr.update(recon_error.item(), 1)
+            meter_loss_perp.update(perplexity.item(), 1)
+            meter_loss.update(loss.item(), 1)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if (i + 1) % 10 == 0:
+            if i % 20 == 0:
                 progress.display(i + 1)
 
-            if (i + 1) % 1000 == 0:
+            if i % 1000 == 0:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
-                    'steps': i + 1,
-                    'state_dict': self.model.state_dict(),
+                    'steps': i,
+                    'state_dict': self.model.encoder.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
-                    'scheduler': self.scheduler.state_dict(),
-                }, 'checkpoint%s.pth.tar' % (i + 1))
+                    'scheduler': self.scheduler.state_dict()
+                }, 'checkpoint%s.pth.tar' % i)
 
                 self.scheduler.step()
+
+                if self.run_wandb:
+                    logs = train_visualize(
+                        model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
+                        image_recs=images_recon[:self.n_images_save])
+
+                    logs = {
+                        **logs,
+                        'iter': i,
+                        'loss_recs': meter_loss_constr.val,
+                        'loss': meter_loss.val,
+                        'lr': self.scheduler.get_last_lr()[0]
+                    }
+                    self.run_wandb.log(logs)
 
         print('saving ...')
         save_checkpoint(self.folder_name, {
@@ -139,6 +140,17 @@ def train_images():
     data_args = params['data_args']
     train_args = params['train_args']
     model_args = params['model_args']
+
+    run_wandb = None
+    if params['use_wandb']:
+        wandb.login(key=os.environ['wanda_api_key'])
+        run_wandb = wandb.init(
+            project='dalle_train_vae',
+            job_type='train_model',
+            config=params
+        )
+    else:
+        run_wandb = wandb.()
 
     model = VqVae(is_video=False, **model_args).to('cuda')
     print('num of trainable parameters: %d' % get_model_size(model))
@@ -157,34 +169,5 @@ def train_images():
     train_object.train()
 
 
-def train_videos():
-    from video_utils import video_pipe, params
-
-    data_args = params['data_args']
-    train_args = params['train_args']
-    model_args = params['model_args']
-
-    model = VqVae(is_video=True, **model_args).to('cuda')
-    print('num of trainable parameters: %d' % get_model_size(model))
-    print(model)
-
-    training_pipe = video_pipe(batch_size=data_args['batch_size'],
-                               num_threads=data_args['num_threads'],
-                               device_id=data_args['device_id'],
-                               filenames=data_args['training_data_files'],
-                               seed=data_args['seed'])
-    training_pipe.build()
-    num_iters_epoch = training_pipe.epoch_size()['__Video_0']
-    train_object = TrainVqVae(model=model, training_loader=training_pipe, num_iters_epoch=num_iters_epoch, **train_args)
-    train_object.train()
-
-
 if __name__ == '__main__':
-    # original resolution: 1920 x 1080
-    # we can scale it down to 256 *144
-    is_video = True
-
-    if is_video:
-        train_videos()
-    else:
-        train_images()
+    train_images()

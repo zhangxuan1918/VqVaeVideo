@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torchvision.transforms import transforms, Normalize
 from torchvision.utils import make_grid
 
-from models.vq_vae.vq_vae import VqVae
+from models.vq_vae.dalle0.vq_vae import VqVae
 from train.data_util import ImagesDataset
 from train.image_utils import params
 from train.train_utils import load_checkpoint
