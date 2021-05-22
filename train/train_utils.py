@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Union, Dict
 
@@ -69,12 +70,13 @@ def load_checkpoint(checkpoint_path: str, device_id: int =0):
     return checkpoint
 
 
-def train_visualize(model: VqVae3, n_images: int, images: Tensor, image_recs: Tensor) -> Dict:
-    z = model.encode(images)
-    x_hard_recs = model.decode(z)
-
-    images, recs, hard_recs, codes = map(lambda t: t.detach().cpu(), (images, image_recs, x_hard_recs, z))
-    images, recs, hard_recs = map(lambda t: make_grid(t.float(), nrow=int(n_images), normalize=True, range=(-1, 1)),
+def train_visualize(model: nn.Module, n_images: int, images: Tensor, image_recs: Tensor) -> Dict:
+    with torch.no_grad():
+        codes = model.get_codebook_indices(images)
+        hard_recons = model.decode(codes)
+    #TODO: unnormalize images
+    images, recs, hard_recs, codes = map(lambda t: t.detach().cpu(), (images, image_recs, hard_recons, codes))
+    images, recs, hard_recs = map(lambda t: make_grid(t.float(), nrow=int(math.sqrt(n_images)), normalize=True, range=(-1, 1)),
                                   (images, recs, hard_recs))
 
     return {
