@@ -1,10 +1,11 @@
 import math
 import os
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
 import wandb
+from matplotlib import pyplot as plt
 from torchvision.transforms import Normalize
 from torchvision.utils import make_grid
 
@@ -68,15 +69,19 @@ def load_checkpoint(checkpoint_path, device_id=0):
 
 
 def train_visualize(unnormalize: torch.nn.Module, n_images: int, images: torch.Tensor,
-                    image_recs: torch.Tensor) -> Dict:
+                    image_recs: torch.Tensor) -> Tuple:
     images, recs = map(lambda t: unnormalize(t).detach().cpu(), (images, image_recs))
-    images, recs = map(lambda t: make_grid(t.float(), nrow=int(math.sqrt(n_images)), normalize=True, range=(-1, 1)),
-                       (images, recs))
+    images, recs = map(lambda t: make_grid(t.float(), nrow=int(math.sqrt(n_images))), (images, recs))
 
-    return {
-        'sampled images': wandb.Image(images, caption='original'),
-        'reconstructions': wandb.Image(recs, caption='recons')
-    }
+    return images, recs
+
+
+def save_images(file_name: str, image: torch.Tensor) -> None:
+    npimg = image.numpy()
+    fig = plt.imshow(np.transpose(npimg, (1, 2, 0)), interpolation='nearest')
+    fig.axes.get_xaxis().set_visible(False)
+    fig.axes.get_yaxis().set_visible(False)
+    plt.savefig(file_name)
 
 
 class NormalizeInverse(Normalize):

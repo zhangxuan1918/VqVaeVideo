@@ -26,7 +26,7 @@ class NormalizeInverse(Normalize):
         return super().__call__(tensor.clone())
 
 
-def reconstruct_images(checkpoint_path, data_args, model_args, is_video=False):
+def reconstruct_images(checkpoint_path, data_args, model_args):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     training_data = ImagesDataset(
@@ -37,7 +37,7 @@ def reconstruct_images(checkpoint_path, data_args, model_args, is_video=False):
 
     checkpoint = load_checkpoint(checkpoint_path, device_id=0)
 
-    model = VqVae(is_video=is_video, **model_args).to('cuda')
+    model = VqVae(**model_args).to('cuda')
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
@@ -49,6 +49,7 @@ def reconstruct_images(checkpoint_path, data_args, model_args, is_video=False):
 
     unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406],
                                    std=[0.229, 0.224, 0.225])
+
     data_recon_unnormalized = unnormalize(data_recon)
     data_orig_unnormalized = unnormalize(data)
     save_images2(make_grid(data_recon_unnormalized.cpu().data), 'recon')

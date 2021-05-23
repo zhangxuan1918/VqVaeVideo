@@ -13,9 +13,8 @@ from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
 from models.vq_vae.dalle0.vq_vae import VqVae
-from train.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
-    train_visualize
+    train_visualize, save_images
 
 
 @attr.s(eq=False, repr=False)
@@ -29,13 +28,19 @@ class TrainVqVae:
     lr_decay: float = attr.ib()
     folder_name: str = attr.ib()
     checkpoint_path: str = attr.ib(default=None)
-    n_images_save: int = attr.ib(default=4)
+    n_images_save: int = attr.ib(default=16)
 
     def __attrs_post_init__(self):
 
+        self.path_img_orig = os.path.join(self.folder_name, 'images_orig')
+        self.path_img_recs = os.path.join(self.folder_name, 'images_recs')
         if not os.path.exists(self.folder_name):
             # shutil.rmtree(folder_name)
             os.mkdir(self.folder_name)
+        if not os.path.exists(self.path_img_orig):
+            os.mkdir(self.path_img_orig)
+        if not os.path.exists(self.path_img_recs):
+            os.mkdir(self.path_img_recs)
 
         if self.checkpoint_path is not None:
             # load model from checkpoint
@@ -103,7 +108,7 @@ class TrainVqVae:
             end = time.time()
 
             if i % 20 == 0:
-                progress.display(i + 1)
+                progress.display(i)
 
             if i % 1000 == 0:
                 print('saving ...')
@@ -114,29 +119,30 @@ class TrainVqVae:
                     'scheduler': self.scheduler.state_dict()
                 }, 'checkpoint%s.pth.tar' % i)
 
-                self.scheduler.step()
+                # self.scheduler.step()
+                images_orig, images_recs = train_visualize(
+                    unnormalize=self.unnormalize, images=images[:self.n_images_save], n_images=self.n_images_save,
+                    image_recs=images_recon[:self.n_images_save])
+
+                save_images(file_name=os.path.join(self.path_img_orig, f'image_{i}.png'), image=images_orig)
+                save_images(file_name=os.path.join(self.path_img_recs, f'image_{i}.png'), image=images_recs)
 
                 if self.run_wandb:
-                    logs = train_visualize(
-                        unnormalize=self.unnormalize, images=images[:self.n_images_save], n_images=self.n_images_save,
-                        image_recs=images_recon[:self.n_images_save])
-
                     logs = {
-                        **logs,
                         'iter': i,
                         'loss_recs': meter_loss_constr.val,
                         'loss': meter_loss.val,
-                        'lr': self.scheduler.get_last_lr()[0]
+                        # 'lr': self.scheduler.get_last_lr()[0]
                     }
                     self.run_wandb.log(logs)
 
         print('saving ...')
         save_checkpoint(self.folder_name, {
-            'steps': self.num_steps + 1,
+            'steps': self.num_steps,
             'state_dict': self.model.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict(),
-        }, 'checkpoint%s.pth.tar' % (self.num_steps + 1))
+        }, 'checkpoint%s.pth.tar' % self.num_steps)
 
 
 def train_images():

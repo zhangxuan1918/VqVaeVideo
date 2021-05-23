@@ -20,7 +20,7 @@ params = {
     },
     'train_args': {
         'num_steps': 250000,  # we increase the batch size to reduce the steps
-        'lr': 1e-3,
+        'lr': 1e-4,
         'lr_decay': 0.98,
         'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
         # 'folder_name': '/opt/project/data/trained_image/2021-05-01',
