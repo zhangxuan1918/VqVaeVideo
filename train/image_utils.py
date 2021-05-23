@@ -1,3 +1,5 @@
+import datetime
+
 params = {
     'model_args': {
         'group_count': 7,
@@ -11,18 +13,19 @@ params = {
         'decay': 0.99
     },
     'data_args': {
-        'batch_size': 64,
-        'root_dir': '/data/Doraemon/images/',
+        'batch_size': 16,
+        # 'root_dir': '/data/Doraemon/images/',
+        'root_dir': '/data/imagenet/ImageNet/train/',
         'num_workers': 6
     },
     'train_args': {
         'num_steps': 250000,  # we increase the batch size to reduce the steps
         'lr': 1e-3,
         'lr_decay': 0.98,
-        # 'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_image/2021-05-01',
-        'checkpoint_path': '/opt/project/data/trained_image/2021-05-01/checkpoint136000.pth.tar',
-        # 'checkpoint_path': None
+        'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        # 'folder_name': '/opt/project/data/trained_image/2021-05-01',
+        # 'checkpoint_path': '/opt/project/data/trained_image/2021-05-01/checkpoint136000.pth.tar',
+        'checkpoint_path': None
     },
-    'use_wandb': True
+    'use_wandb': False
 }

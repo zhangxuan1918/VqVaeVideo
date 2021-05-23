@@ -1,7 +1,12 @@
+import math
 import os
+from typing import Dict
 
 import numpy as np
 import torch
+import wandb
+from torchvision.transforms import Normalize
+from torchvision.utils import make_grid
 
 
 def get_model_size(model):
@@ -28,6 +33,7 @@ class ProgressMeter(object):
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self, name, fmt=':f'):
         self.name = name
         self.fmt = fmt
@@ -60,3 +66,30 @@ def load_checkpoint(checkpoint_path, device_id=0):
     checkpoint = torch.load(checkpoint_path, map_location=loc)
     return checkpoint
 
+
+def train_visualize(unnormalize: torch.nn.Module, n_images: int, images: torch.Tensor,
+                    image_recs: torch.Tensor) -> Dict:
+    images, recs = map(lambda t: unnormalize(t).detach().cpu(), (images, image_recs))
+    images, recs = map(lambda t: make_grid(t.float(), nrow=int(math.sqrt(n_images)), normalize=True, range=(-1, 1)),
+                       (images, recs))
+
+    return {
+        'sampled images': wandb.Image(images, caption='original'),
+        'reconstructions': wandb.Image(recs, caption='recons')
+    }
+
+
+class NormalizeInverse(Normalize):
+    """
+    Undoes the normalization and returns the reconstructed images in the input domain.
+    """
+
+    def __init__(self, mean, std):
+        mean = torch.as_tensor(mean)
+        std = torch.as_tensor(std)
+        std_inv = 1 / (std + 1e-7)
+        mean_inv = -mean * std_inv
+        super().__init__(mean=mean_inv, std=std_inv)
+
+    def __call__(self, tensor):
+        return super().__call__(tensor.clone())

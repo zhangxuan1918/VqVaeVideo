@@ -2,22 +2,26 @@ import os.path
 import time
 from typing import Union
 
+import attr
 import torch
 import torch.nn.functional as F
-import attr
 import wandb
+from torch import nn
+from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
 from models.vq_vae.dalle0.vq_vae import VqVae
 from train.data_util import ImagesDataset
-from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter
+from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
+    train_visualize
 
 
 @attr.s(eq=False, repr=False)
 class TrainVqVae:
     model: nn.Module = attr.ib()
+    unnormalize: nn.Module = attr.ib()
     training_loader: torch.utils.data.DataLoader = attr.ib()
     run_wandb: Union[Run, RunDisabled, None] = attr.ib()
     num_steps: int = attr.ib()
@@ -75,10 +79,10 @@ class TrainVqVae:
             data_time.update(time.time() - end)
 
             try:
-                images = next(data_iter)
+                images, _ = next(data_iter)
             except StopIteration:
                 data_iter = iter(self.training_loader)
-                images = next(data_iter)
+                images, _ = next(data_iter)
 
             images = images.to('cuda')
             self.optimizer.zero_grad()
@@ -114,7 +118,7 @@ class TrainVqVae:
 
                 if self.run_wandb:
                     logs = train_visualize(
-                        model=self.model, images=images[:self.n_images_save], n_images=self.n_images_save,
+                        unnormalize=self.unnormalize, images=images[:self.n_images_save], n_images=self.n_images_save,
                         image_recs=images_recon[:self.n_images_save])
 
                     logs = {
@@ -152,18 +156,28 @@ def train_images():
     else:
         run_wandb = RunDisabled()
 
-    model = VqVae(is_video=False, **model_args).to('cuda')
+    model = VqVae(**model_args).to('cuda')
     print('num of trainable parameters: %d' % get_model_size(model))
     print(model)
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    training_data = ImagesDataset(
-        root_dir=data_args['root_dir'],
-        transform=transforms.Compose([transforms.ToTensor(), normalize]))
+    unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    training_data = ImageFolder(
+        data_args['root_dir'],
+        transforms.Compose([
+            transforms.RandomResizedCrop(256),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize
+        ])
+    )
+
     training_loader = torch.utils.data.DataLoader(
         training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
 
     train_object = TrainVqVae(model=model, training_loader=training_loader, run_wandb=run_wandb,
+                              unnormalize=unnormalize,
                               **train_args)
     try:
         train_object.train()

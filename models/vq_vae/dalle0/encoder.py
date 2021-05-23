@@ -21,13 +21,13 @@ class EncoderBlock(nn.Module):
         self.id_path = nn.Conv2d(in_channels=self.n_in, out_channels=self.n_out, kernel_size=1) \
             if self.n_in != self.n_out else nn.Identity()
         self.res_path = nn.Sequential(OrderedDict([
-            ('relu_1', nn.ReLU(True)),
+            ('relu_1', nn.ReLU()),
             ('conv_1', nn.Conv2d(in_channels=self.n_in, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_2', nn.ReLU(True)),
+            ('relu_2', nn.ReLU()),
             ('conv_2', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_3', nn.ReLU(True)),
+            ('relu_3', nn.ReLU()),
             ('conv_3', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_4', nn.ReLU(True)),
+            ('relu_4', nn.ReLU()),
             ('conv_4', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_out, kernel_size=1)),
         ]))
 
