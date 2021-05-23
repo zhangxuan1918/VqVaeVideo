@@ -182,7 +182,7 @@ def train_videos():
 if __name__ == '__main__':
     # original resolution: 1920 x 1080
     # we can scale it down to 256 *144
-    is_video = True
+    is_video = False
 
     if is_video:
         train_videos()
