@@ -105,7 +105,7 @@ class TrainVqVae:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
                     'steps': i,
-                    'state_dict': self.model.encoder.state_dict(),
+                    'state_dict': self.model.decoder.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                     'scheduler': self.scheduler.state_dict()
                 }, 'checkpoint%s.pth.tar' % i)
@@ -141,32 +141,34 @@ def train_images():
     train_args = params['train_args']
     model_args = params['model_args']
 
-    run_wandb = None
     if params['use_wandb']:
         wandb.login(key=os.environ['wanda_api_key'])
         run_wandb = wandb.init(
             project='dalle_train_vae',
             job_type='train_model',
-            config=params
+            config=params,
+            resume=train_args['checkpoint_path'] is not None
         )
     else:
-        run_wandb = wandb.()
+        run_wandb = RunDisabled()
 
     model = VqVae(is_video=False, **model_args).to('cuda')
     print('num of trainable parameters: %d' % get_model_size(model))
     print(model)
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     training_data = ImagesDataset(
         root_dir=data_args['root_dir'],
         transform=transforms.Compose([transforms.ToTensor(), normalize]))
     training_loader = torch.utils.data.DataLoader(
         training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
-    num_iters_epoch = len(training_loader)
-    train_object = TrainVqVae(model=model, training_loader=training_loader, num_iters_epoch=num_iters_epoch,
+
+    train_object = TrainVqVae(model=model, training_loader=training_loader, run_wandb=run_wandb,
                               **train_args)
-    train_object.train()
+    try:
+        train_object.train()
+    finally:
+        run_wandb.finish()
 
 
 if __name__ == '__main__':
