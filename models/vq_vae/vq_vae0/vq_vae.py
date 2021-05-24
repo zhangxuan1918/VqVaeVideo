@@ -4,8 +4,8 @@ import attr
 import torch
 from torch import nn
 
-from models.vq_vae.dalle0 import Encoder, Decoder
-from models.vq_vae.dalle0.layer import VectorQuantizerEMA, VectorQuantizer
+from models.vq_vae.vq_vae0 import Encoder, Decoder
+from models.vq_vae.vq_vae0.layer import VectorQuantizerEMA, VectorQuantizer
 
 
 @attr.s(repr=False, eq=False)
