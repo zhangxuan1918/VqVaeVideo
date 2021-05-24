@@ -1,11 +1,10 @@
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 import numpy as np
-from torchvision.utils import make_grid
 from einops import rearrange
-from models.vq_vae.vq_vae import VqVae
+from models.vq_vae.dalle0.vq_vae import VqVae
 from train.train_utils import load_checkpoint
-from train.video_utils import video_pipe, list_videos, list_videos2
-from valid.reconstruct_untils import save_images, save_images2
+from train.video_utils import video_pipe, list_videos2
+from valid.reconstruct_untils import save_images
 import torch.nn.functional as F
 import torch
 
