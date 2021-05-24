@@ -68,8 +68,8 @@ class Decoder(nn.Module):
         decode_blks.append(make_grp(gid=self.group_count, n=self.n_hid, n_prev=n_prev, upsample=False))
         decode_blks.append(
             ('output', nn.Sequential(OrderedDict([
-                # ('relu', nn.ReLU()),
-                ('conv', make_conv(in_channels=self.n_hid, out_channels=self.output_channels, kernel_size=7, padding=3)),
+                ('relu', nn.ReLU()),
+                ('conv', make_conv(in_channels=self.n_hid, out_channels=self.output_channels, kernel_size=1)),
             ]))))
         self.blocks = nn.Sequential(OrderedDict(decode_blks))
 

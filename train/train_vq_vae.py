@@ -13,6 +13,7 @@ from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
 from models.vq_vae.dalle0.vq_vae import VqVae
+from train.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
     train_visualize, save_images
 
@@ -84,10 +85,10 @@ class TrainVqVae:
             data_time.update(time.time() - end)
 
             try:
-                images, _ = next(data_iter)
+                images = next(data_iter)
             except StopIteration:
                 data_iter = iter(self.training_loader)
-                images, _ = next(data_iter)
+                images = next(data_iter)
 
             images = images.to('cuda')
             self.optimizer.zero_grad()
@@ -114,12 +115,12 @@ class TrainVqVae:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
                     'steps': i,
-                    'state_dict': self.model.decoder.state_dict(),
+                    'state_dict': self.model.state_dict(),
                     'optimizer': self.optimizer.state_dict(),
                     'scheduler': self.scheduler.state_dict()
                 }, 'checkpoint%s.pth.tar' % i)
 
-                # self.scheduler.step()
+                self.scheduler.step()
                 images_orig, images_recs = train_visualize(
                     unnormalize=self.unnormalize, images=images[:self.n_images_save], n_images=self.n_images_save,
                     image_recs=images_recon[:self.n_images_save])
@@ -132,7 +133,7 @@ class TrainVqVae:
                         'iter': i,
                         'loss_recs': meter_loss_constr.val,
                         'loss': meter_loss.val,
-                        # 'lr': self.scheduler.get_last_lr()[0]
+                        'lr': self.scheduler.get_last_lr()[0]
                     }
                     self.run_wandb.log(logs)
 
@@ -169,10 +170,10 @@ def train_images():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    training_data = ImageFolder(
+    training_data = ImagesDataset(
         data_args['root_dir'],
         transforms.Compose([
-            transforms.RandomResizedCrop(256),
+            # transforms.RandomResizedCrop(256),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize

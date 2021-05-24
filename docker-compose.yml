@@ -4,7 +4,7 @@ services:
     build:
       context: .
     shm_size: '10g'
-    image: xuan1918/vq_vae_video:v0.0.2
+    image: xuan1918/vq_vae_video:v0.0.4
     container_name: vq_vae_video
     privileged: true
     environment:
@@ -12,6 +12,8 @@ services:
     volumes:
       - /data/Projects/data:/data
       - /data/Projects/python:/code
+    env_file:
+      - env_vars.txt
     deploy:
       resources:
         reservations:
