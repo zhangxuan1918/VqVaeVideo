@@ -2,11 +2,11 @@ import datetime
 
 params = {
     'model_args': {
-        'group_count': 7,
-        'n_hid': 128,
+        'group_count': 4,
+        'n_hid': 64,
         'n_blk_per_group': 1,
-        'vocab_size': 8192 * 4,
-        'n_init': 128,
+        'vocab_size': 8192 * 1,
+        'n_init': 512,
         'input_channels': 3,
         'output_channels': 3,
         'commitment_cost': 0.25,
@@ -19,7 +19,7 @@ params = {
         'num_workers': 6
     },
     'train_args': {
-        'num_steps': 250000,  # we increase the batch size to reduce the steps
+        'num_steps': 80000,  # we increase the batch size to reduce the steps
         'lr': 1e-4,
         'lr_decay': 0.98,
         'folder_name': '/opt/project/data/trained_image/' + datetime.datetime.today().strftime('%Y-%m-%d'),
