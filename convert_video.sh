@@ -1,8 +1,11 @@
-# convert mkv to mp4
-ffmpeg -i <VIDEO>.mkv -codec copy <VIDEO>.mp4
-
-# clean up video, cut the beginning and the end of the video
-ffmpeg -ss 00:03:49 -to 00:53:35 -i e01.mp4 -c copy e01_clean.mp4
-
-# change resolution
-ffmpeg -i e01_clean.mp4 -vf scale=256:144 e01_256_144.mp4
+#!/bin/bash
+VIDEO_RAW_FILES=/data/Projects/data/video/raw/*
+VIDEO_FOLDER=/data/Projects/data/video/256x256/
+for f in $VIDEO_RAW_FILES
+do
+  ff=${f##*/}
+  fff=${ff%.*}
+  echo "Processing $ff file, save to $VIDEO_FOLDER$ff"
+#  echo "ffmpeg -i $f -vf fps=23 $VIDEO_FOLDER$fff.mp4"
+  ffmpeg -i $f -vf fps=23 $VIDEO_FOLDER$fff.mp4
+done
