@@ -4,6 +4,8 @@ Use VQ-VAE to compress images/videos.
 
 ## Images
 
+Compression ratio = 192
+
 Original
 
 ![orignal](data/images/origin.png)
@@ -13,6 +15,8 @@ Reconstructed
 ![reconstructed](data/images/recons.png)
 
 ## Videos
+
+Compression ratio = 3072
 
 Original
 
