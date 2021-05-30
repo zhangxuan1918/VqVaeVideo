@@ -35,12 +35,13 @@ def list_videos2(video_folder):
 
 params = {
     'model_args': {
-        'num_hiddens': 128,
-        'num_residual_hiddens': 32,
-        'num_residual_layers': 2,
-        'embedding_dim': 256,
-        'embedding_mul': 4, # after encoder, the time dimension is 4, thus, the quantizer embedding dim = embedding_dim * embedding_mul
-        'num_embeddings': 8192,
+        'group_count': 4,
+        'n_hid': 64,
+        'n_blk_per_group': 1,
+        'vocab_size': 8192,
+        'n_init': 512,
+        'input_channels': 48, # sequence_length * 3
+        'output_channels': 48, # sequence_length * 3
         'commitment_cost': 0.25,
         'decay': 0.99
     },
@@ -48,22 +49,23 @@ params = {
         'batch_size': 48,
         'num_threads': 6,
         'device_id': 0,
-        'training_data_files': list_videos2('/data/Doraemon/video_clips/'),
-        'seed': 1987,
+        'training_data_files': list_videos2('/data/Doraemon/video_clips/256x256/'),
+        'seed': 2021,
         'sequence_length': 16,
         'shard_id': 0,
         'num_shards': 1,
-        'initial_prefetch_size': 10240
+        'initial_prefetch_size': 1024
     },
     'train_args': {
-        'num_steps': 250000,
-        'lr': 1e-3,
+        'num_steps': 80000,
+        'lr': 1e-4,
         'lr_decay': 0.98,
-        # 'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_video/2021-05-08',
-        'checkpoint_path': '/opt/project/data/trained_video/2021-05-08/checkpoint25000.pth.tar',
-        # 'checkpoint_path': None
-    }
+        'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        # 'folder_name': '/opt/project/data/trained_video/2021-05-08',
+        # 'checkpoint_path': '/opt/project/data/trained_video/2021-05-08/checkpoint25000.pth.tar',
+        'checkpoint_path': None
+    },
+    'use_wandb': False
 }
 
 

@@ -7,12 +7,13 @@ import torch
 import torch.nn.functional as F
 import wandb
 from torch import nn
+from torchvision.datasets import ImageFolder
 from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
 from models.vq_vae.vq_vae0.vq_vae import VqVae
-from train.data_util import ImagesDataset
+from train.images.data_util import ImagesDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
     train_visualize, save_images
 
@@ -84,10 +85,10 @@ class TrainVqVae:
             data_time.update(time.time() - end)
 
             try:
-                images = next(data_iter)
+                images, _ = next(data_iter)
             except StopIteration:
                 data_iter = iter(self.training_loader)
-                images = next(data_iter)
+                images, _ = next(data_iter)
 
             images = images.to('cuda')
             self.optimizer.zero_grad()
@@ -146,7 +147,7 @@ class TrainVqVae:
 
 
 def train_images():
-    from image_utils import params
+    from train.images.image_utils import params
     data_args = params['data_args']
     train_args = params['train_args']
     model_args = params['model_args']
@@ -169,10 +170,10 @@ def train_images():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    training_data = ImagesDataset(
+    training_data = ImageFolder(
         data_args['root_dir'],
         transforms.Compose([
-            # transforms.RandomResizedCrop(256),
+            transforms.RandomResizedCrop(256),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             normalize

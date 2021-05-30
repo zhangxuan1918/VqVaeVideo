@@ -1,84 +1,135 @@
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
+import cv2
 import numpy as np
-from einops import rearrange
-from models.vq_vae.vq_vae0.vq_vae import VqVae
-from train.train_utils import load_checkpoint
-from train.video_utils import video_pipe, list_videos2
-from valid.reconstruct_untils import save_images
-import torch.nn.functional as F
 import torch
+from einops import rearrange
+from torchvision.transforms import transforms
+
+from models.vq_vae.vq_vae0.vq_vae import VqVae
+from train.train_utils import load_checkpoint, NormalizeInverse
+from train.videos.video_utils import params
 
 
-def reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=2021, is_video=True):
-    training_pipe = video_pipe(batch_size=batch_size,
-                               num_threads=num_threads,
-                               device_id=device_id,
-                               filenames=training_data_files,
-                               seed=seed)
-    training_pipe.build()
-    training_loader = DALIGenericIterator(training_pipe, ['data'])
+def save_video(model, images, normalize, unnormalize):
+    np_images = np.asarray(images)
+    images = torch.from_numpy(np_images).to('cuda')
+    b, d, _, _, c = images.size()
+    images = rearrange(images, 'b d h w c -> (b d) c h w')
+    images = normalize(images.float() / 255.)
+    images = rearrange(images, '(b d) c h w -> b (d c) h w', b=b, d=d, c=c)
+
+    _, images_recon, _ = model(images)
+    images_recon = rearrange(images_recon, 'b (d c) h w -> b d c h w', b=b, d=d, c=c)
+    images_recon = unnormalize(images_recon)
+    images_recon = torch.clip(images_recon, 0.0, 1.0)
+    images_recon = rearrange(images_recon, 'b d c h w -> b d h w c').detach().cpu().numpy()
+    images_recon = (images_recon * 255).astype('uint8')
+
+    return images_recon
+
+
+def reconstruct(checkpoint_path, batch_size, model_args, video_file, resolution=256):
     checkpoint = load_checkpoint(checkpoint_path, device_id=0)
 
-    model = VqVae(is_video=is_video, **model_args).to('cuda')
+    model = VqVae(**model_args).to('cuda')
     model.load_state_dict(checkpoint['state_dict'])
     model.eval()
 
-    std = torch.as_tensor([0.229, 0.224, 0.225], device='cuda')
-    std_inv = 1.0 / (std + 1e-7)
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-    mean = torch.as_tensor([0.485, 0.456, 0.406], device='cuda')
-    mean_inv = -mean * std_inv
+    video_in = cv2.VideoCapture(video_file)
+    fps = video_in.get(cv2.CAP_PROP_FPS)
 
-    std = std.view(-1, 1, 1, 1)
-    std_inv = std_inv.view(-1, 1, 1, 1)
-    mean = mean.view(-1, 1, 1, 1)
-    mean_inv = mean_inv.view(-1, 1, 1, 1)
+    video_out = cv2.VideoWriter('reconst.mp4', cv2.VideoWriter_fourcc(*'FMP4'), fps, (resolution, resolution))
 
-    data = next(training_loader)[0]['data'].float()
-    B, D, H, W, C = data.size() # batch size = 1
-    data = rearrange(data, 'b d h w c -> b c d h w')
-    data = data / 127.5 - 1
-    data.sub_(mean).div_(std)
+    raw_images = []
+    raw_seqs = []
+    i = 1
+    while video_in.isOpened():
+        ret, frame = video_in.read()
+        if ret:
+            raw_seqs.append(frame)
+        else:
+            break
 
-    _, data_recon, _ = model(data)
-    recon_error = F.mse_loss(data_recon, data)
-    print('reconstruct error: %6.2f' % recon_error)
-    recon = rearrange(torch.clip(data_recon.sub_(mean_inv).div_(std_inv), -1.0, 1.0), 'b c d h w -> b d h w c')
-    original = rearrange(data.sub_(mean_inv).div_(std_inv), 'b c d h w -> b d h w c')
+        if len(raw_seqs) == 16:
+            raw_images.append(np.stack(raw_seqs, 0))
+            raw_seqs = []
 
-    for i in range(B):
-        # interleave original and reconstructed
+        if len(raw_images) == batch_size:
+            print('batch %d' % i)
+            i += 1
+            raw_images = np.stack(raw_images, 0)
+            images_recon = save_video(model, raw_images, normalize, unnormalize)
+            for seqs in images_recon:
+                for frame in seqs:
+                    video_out.write(frame)
+            raw_images = []
 
-        interleaved = np.empty((2 * D, H, W, C), dtype=np.uint8)
-        recon_one = ((recon[i] + 1) * 127.5).cpu().detach().numpy().astype(np.uint8)
-        orig_one = ((original[i] + 1) * 127.5).cpu().detach().numpy().astype(np.uint8)
+    if len(raw_images) > 0:
+        print('batch %d' % i)
+        i += 1
+        raw_images = np.stack(raw_images, 0)
+        images_recon = save_video(model, raw_images, normalize, unnormalize)
+        for seqs in images_recon:
+            for frame in seqs:
+                video_out.write(frame)
 
-        interleaved[0::2, :, :, :] = recon_one
-        interleaved[1::2, :, :, :] = orig_one
+    video_out.release()
+    video_in.release()
+    cv2.destroyAllWindows()
 
-        save_images(interleaved, i)
 
-    # for i in range(B):
-    #     save_images(recon[i], i)
+def reconstruct_test(batch_size, video_file, resolution=256):
+
+    video_in = cv2.VideoCapture(video_file)
+    fps = video_in.get(cv2.CAP_PROP_FPS)
+
+    video_out = cv2.VideoWriter('reconst.mp4', cv2.VideoWriter_fourcc(*'FMP4'), fps, (resolution, resolution))
+
+    raw_images = []
+    raw_seqs = []
+    i = 1
+    while video_in.isOpened():
+        ret, frame = video_in.read()
+        if ret:
+            raw_seqs.append(frame)
+        else:
+            break
+
+        if len(raw_seqs) == 16:
+            raw_images.append(raw_seqs)
+            raw_seqs = []
+
+        if len(raw_images) == batch_size:
+            print('batch %d' % i)
+            i += 1
+            for seqs in raw_images:
+                for frame in seqs:
+                    video_out.write(frame)
+            raw_images = []
+
+    # if len(raw_seqs) > 0:
+    #     raw_images.append(raw_seqs)
+    if len(raw_images) > 0:
+        print('batch %d' % i)
+        i += 1
+        for seqs in raw_images:
+            for frame in seqs:
+                video_out.write(frame)
+    video_out.release()
+    video_in.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
-    model_args = {
-        'num_hiddens': 128,
-        'num_residual_hiddens': 32,
-        'num_residual_layers': 2,
-        'embedding_dim': 256,
-        'embedding_mul': 4,
-        'num_embeddings': 8192,
-        'commitment_cost': 0.25,
-        'decay': 0.99
-    }
-    model_id = '2021-05-08'
-    checkpoint_file = 'checkpoint46000.pth.tar'
+    model_args = params['model_args']
+    model_id = '2021-05-27'
+    checkpoint_file = 'checkpoint24000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
-    device_id = 0
-    training_data_files = list_videos2('/data/Doraemon/video_clips/')
-    batch_size = 16
-    num_threads = 2
-    reconstruct(checkpoint_path, batch_size, num_threads, device_id, training_data_files, model_args, seed=60,
-                is_video=True)
+
+    # video_file = '/data/Doraemon/raw/256x256/2014.mp4'
+    video_file = '/data/Doraemon/video_clips/256x256/2014-18.mp4'
+    batch_size = 48
+    reconstruct(checkpoint_path, batch_size, model_args, video_file, resolution=256)
+    # reconstruct_test(batch_size, video_file, resolution=256)

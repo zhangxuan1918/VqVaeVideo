@@ -2,28 +2,11 @@ import torch
 import torch.nn.functional as F
 from torchvision.transforms import transforms, Normalize
 from torchvision.utils import make_grid
-
 from models.vq_vae.vq_vae0.vq_vae import VqVae
-from train.data_util import ImagesDataset
-from train.image_utils import params
-from train.train_utils import load_checkpoint
+from train.images.data_util import ImagesDataset
+from train.images.image_utils import params
+from train.train_utils import load_checkpoint, NormalizeInverse
 from valid.reconstruct_untils import save_images2
-
-
-class NormalizeInverse(Normalize):
-    """
-    Undoes the normalization and returns the reconstructed images in the input domain.
-    """
-
-    def __init__(self, mean, std):
-        mean = torch.as_tensor(mean)
-        std = torch.as_tensor(std)
-        std_inv = 1 / (std + 1e-7)
-        mean_inv = -mean * std_inv
-        super().__init__(mean=mean_inv, std=std_inv)
-
-    def __call__(self, tensor):
-        return super().__call__(tensor.clone())
 
 
 def reconstruct_images(checkpoint_path, data_args, model_args):
@@ -61,8 +44,8 @@ if __name__ == '__main__':
     data_args = params['data_args']
     data_args['batch_size'] = 16
 
-    model_id = '2021-05-01'
-    checkpoint_file = 'checkpoint250001.pth.tar'
+    model_id = '2021-05-25'
+    checkpoint_file = 'checkpoint80000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_image/%s/%s' % (model_id, checkpoint_file)
     batch_size = 16
-    reconstruct_images(checkpoint_path, data_args, model_args, is_video=False)
+    reconstruct_images(checkpoint_path, data_args, model_args)

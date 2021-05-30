@@ -7,7 +7,7 @@ from dall_e import map_pixels, unmap_pixels, load_model
 import numpy as np
 from torchvision.utils import make_grid
 
-from train.data_util import ImagesDataset
+from train.images.data_util import ImagesDataset
 from valid.reconstruct_untils import save_images2
 
 

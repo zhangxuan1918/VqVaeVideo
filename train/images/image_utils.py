@@ -5,7 +5,7 @@ params = {
         'group_count': 4,
         'n_hid': 64,
         'n_blk_per_group': 1,
-        'vocab_size': 8192 * 1,
+        'vocab_size': 8192,
         'n_init': 512,
         'input_channels': 3,
         'output_channels': 3,
