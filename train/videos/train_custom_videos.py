@@ -89,7 +89,7 @@ class TrainVqVae:
             try:
                 images = next(data_iter)[0]['data']
             except StopIteration:
-                data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
+                data_iter.reset()
                 images = next(data_iter)[0]['data']
 
             images = images.to('cuda')

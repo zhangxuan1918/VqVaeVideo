@@ -48,11 +48,12 @@ if __name__ == '__main__':
 
     data_args['batch_size'] = 4
     data_args['seed'] = random.randint(0, 100)
+    data_args['training_data_files'] = list_videos2('/data/Doraemon/video_clips/256x256/')
+
     model_id = '2021-05-27'
     checkpoint_file = 'checkpoint24000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
     device_id = 0
-    training_data_files = list_videos2('/data/Doraemon/video_clips/256x256/')
     batch_size = 16
     num_threads = 2
     reconstruct(checkpoint_path, data_args, model_args)

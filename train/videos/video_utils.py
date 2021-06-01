@@ -57,7 +57,7 @@ params = {
         'initial_prefetch_size': 1024
     },
     'train_args': {
-        'num_steps': 80000,
+        'num_steps': 160000,
         'lr': 1e-4,
         'lr_decay': 0.98,
         'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),

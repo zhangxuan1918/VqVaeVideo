@@ -1,6 +1,8 @@
 #!/bin/bash
-VIDEO_FILES=/data/Projects/data/Doraemon/raw/256x256/*
-SAVE_FOLDER=/data/Projects/data/Doraemon/video_clips/256x256/
+
+show=westworld
+VIDEO_FILES=/data/Projects/data/$show/256x256/*
+SAVE_FOLDER=/data/Projects/data/$show/video_clips/256x256/
 for f in $VIDEO_FILES
 do
   ff=${f##*/}
