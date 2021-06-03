@@ -1,6 +1,6 @@
 #!/bin/bash
-VIDEO_RAW_FILES=/data/Projects/data/westworld/raw/*
-VIDEO_FOLDER=/data/Projects/data/westworld/256x256/
+VIDEO_RAW_FILES=/data/Projects/data/breaking_bad/raw/*
+VIDEO_FOLDER=/data/Projects/data/breaking_bad/256x256/
 for f in $VIDEO_RAW_FILES
 do
   ff=${f##*/}

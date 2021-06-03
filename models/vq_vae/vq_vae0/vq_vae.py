@@ -2,6 +2,7 @@ from typing import Tuple
 
 import attr
 import torch
+from einops import rearrange
 from torch import nn
 
 from models.vq_vae.vq_vae0 import Encoder, Decoder
@@ -66,9 +67,17 @@ class VqVae(nn.Module):
 
     @torch.no_grad()
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        _, quantized, _, _ = self.vq_vae(x)
-        return quantized
+        z = self.encoder(x)
+        _, _, _, codes = self.vq_vae(z)
+        return codes
 
     @torch.no_grad()
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        return self.decoder(z)
+    def decode(self, encode_indices: torch.Tensor) -> torch.Tensor:
+        b, h, w = encode_indices.size()
+        encode_indices = rearrange(encode_indices, 'b h w -> (b h w) 1').to(torch.int64)
+        encodings = torch.zeros(encode_indices.shape[0], self.vq_vae.num_embeddings, device=encode_indices.device)
+        encodings.scatter_(1, encode_indices, 1)
+        quantized = rearrange(torch.matmul(encodings, self.vq_vae.embedding.weight), self.vq_vae.p_flatten,
+                              b=b, h=h, w=w)
+        quantized = rearrange(quantized, self.vq_vae.p_space_last)
+        return self.decoder(quantized)

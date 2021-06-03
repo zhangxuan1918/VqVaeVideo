@@ -16,7 +16,7 @@ params = {
         'batch_size': 32,
         'root_dir': '/data/Doraemon/images/',
         # 'root_dir': '/data/imagenet/ImageNet/train/',
-        'num_workers': 6
+        'num_workers': 0
     },
     'train_args': {
         'num_steps': 80000,  # we increase the batch size to reduce the steps
