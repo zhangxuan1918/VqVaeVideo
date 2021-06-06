@@ -1,10 +1,9 @@
 import math
 import os
-from typing import Dict, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
-import wandb
 from matplotlib import pyplot as plt
 from torchvision.transforms import Normalize
 from torchvision.utils import make_grid

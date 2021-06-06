@@ -29,11 +29,6 @@ class VqVae(nn.Module):
     # use EMA for quantization
     decay: float = attr.ib(default=0.99, validator=lambda i, a, x: x >= 0.0)
 
-    # whether downsample spatially in encoder
-    downsample: bool = attr.ib(default=True)
-    # whether upsample spatially in decoder
-    upsample: bool = attr.ib(default=True)
-
     def __attrs_post_init__(self):
         super().__init__()
 
@@ -42,9 +37,7 @@ class VqVae(nn.Module):
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
             input_channels=self.input_channels,
-            n_init=self.n_init,
-            downsample=self.downsample
-        )
+            n_init=self.n_init)
 
         if self.decay > 0.0:
             self.vq_vae = VectorQuantizerEMA(
@@ -63,8 +56,7 @@ class VqVae(nn.Module):
             n_init=self.n_init,
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
-            output_channels=self.output_channels,
-            upsample=self.upsample
+            output_channels=self.output_channels
         )
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:

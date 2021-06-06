@@ -1,6 +1,8 @@
 #!/bin/bash
-VIDEO_FILES=/data/Projects/data/Doraemon/video_clips/*
-IMAGE_FOLDER=/data/Projects/data/Doraemon/images/
+
+show=
+VIDEO_FILES=/data/Projects/data/$show/images/*.mp4
+IMAGE_FOLDER=/data/Projects/data/$show/images/
 for f in $VIDEO_FILES
 do
   ff=${f##*/}

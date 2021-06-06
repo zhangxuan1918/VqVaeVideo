@@ -8,44 +8,13 @@ from torch import nn
 
 
 @attr.s(repr=False, eq=False)
-class EncoderBlock(nn.Module):
-    n_in: int = attr.ib(validator=lambda i, a, x: x >= 1)
-    n_out: int = attr.ib(validator=lambda i, a, x: x >= 1 and x % 4 == 0)
-    n_layers: int = attr.ib(validator=lambda i, a, x: x >= 1)
-
-    def __attrs_post_init__(self) -> None:
-        super().__init__()
-        self.n_hid = self.n_out // 4
-        self.post_gain = 1 / (self.n_layers ** 2)
-
-        self.id_path = nn.Conv2d(in_channels=self.n_in, out_channels=self.n_out, kernel_size=1) \
-            if self.n_in != self.n_out else nn.Identity()
-        self.res_path = nn.Sequential(OrderedDict([
-            ('relu_1', nn.ReLU()),
-            ('conv_1', nn.Conv2d(in_channels=self.n_in, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_2', nn.ReLU()),
-            ('conv_2', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_3', nn.ReLU()),
-            ('conv_3', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_4', nn.ReLU()),
-            ('conv_4', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_out, kernel_size=1)),
-        ]))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.id_path(x) + self.post_gain * self.res_path(x)
-
-
-@attr.s(repr=False, eq=False)
-class Encoder(nn.Module):
+class Encoder1(nn.Module):
     group_count: int = attr.ib()
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
     n_blk_per_group: int = attr.ib(default=2, validator=lambda i, a, x: x >= 1)
     input_channels: int = attr.ib(default=3, validator=lambda i, a, x: x >= 1)
     # codebook dim
     n_init: int = attr.ib(default=128, validator=lambda i, a, x: x > 0)
-
-    # whether downsample spatially
-    downsample: bool = attr.ib(default=True)
 
     def __attrs_post_init__(self):
         super().__init__()
@@ -66,7 +35,7 @@ class Encoder(nn.Module):
         encode_blks = [('input', make_conv(in_channels=self.input_channels, out_channels=self.n_hid, kernel_size=7, padding=3))]
         n, n_prev = self.n_hid, self.n_hid
         for gid in range(1, self.group_count):
-            encode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev, downsample=self.downsample))
+            encode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev))
             n_prev = n
             n = (gid + 1) * self.n_hid
         encode_blks.append(make_grp(gid=self.group_count, n=n, n_prev=n_prev, downsample=False))

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-show=westworld
+show=
 VIDEO_FILES=/data/Projects/data/$show/256x256/*
 SAVE_FOLDER=/data/Projects/data/$show/video_clips/256x256/
 for f in $VIDEO_FILES
