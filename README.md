@@ -25,5 +25,6 @@ Reconstructed (Compression ratio = 3072)
 ![reconstructed2](data/videos/2014-18-1.gif)
 
 Reconstructed (Compression ratio = 9216)
+
 ![reconstructed1](data/videos/2014-275-2.gif)
 ![reconstructed2](data/videos/2014-18-2.gif)
