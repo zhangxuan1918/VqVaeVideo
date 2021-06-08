@@ -43,7 +43,7 @@ if __name__ == '__main__':
     model_args = params['model_args']
     data_args = params['data_args']
     data_args['batch_size'] = 32
-    data_args['root_dir'] = '/data/westworld/images/256x256'
+    data_args['root_dir'] = '/data/breaking_bad/images/256x256'
 
     model_id = '2021-05-25'
     checkpoint_file = 'checkpoint80000.pth.tar'

@@ -5,12 +5,12 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from models.vq_vae.vq_vae0 import Encoder, Decoder
 from models.vq_vae.vq_vae0.layer import VectorQuantizerEMA, VectorQuantizer
+from models.vq_vae.vq_vae1 import Encoder1, Decoder1
 
 
 @attr.s(repr=False, eq=False)
-class VqVae(nn.Module):
+class VqVae1(nn.Module):
     group_count: int = attr.ib()
     # init hidden features for encoder
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
@@ -37,7 +37,7 @@ class VqVae(nn.Module):
     def __attrs_post_init__(self):
         super().__init__()
 
-        self.encoder = Encoder(
+        self.encoder = Encoder1(
             group_count=self.group_count,
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
@@ -58,7 +58,7 @@ class VqVae(nn.Module):
                 embedding_dim=self.n_init,
                 commitment_cost=self.commitment_cost)
 
-        self.decoder = Decoder(
+        self.decoder = Decoder1(
             group_count=self.group_count,
             n_init=self.n_init,
             n_hid=self.n_hid,

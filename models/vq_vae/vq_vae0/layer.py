@@ -22,6 +22,7 @@ class VectorQuantizer(nn.Module):
         self.p_space_last = 'b h w c -> b c h w'
         self.p_group = 'b h w c -> (b h w) c'
         self.p_flatten = '(b h w) c -> b h w c'
+        self.p_code = '(b h w) -> b h w'
 
     def _forward(self, inputs, flat_input, **kwargs):
         # inputs shape: [b h w c]
@@ -50,7 +51,7 @@ class VectorQuantizer(nn.Module):
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
 
-        return loss, quantized, perplexity, encodings
+        return loss, quantized, perplexity, encoding_indices
 
     def forward(self, inputs):
         # convert inputs from BCHW -> BHWC
@@ -63,11 +64,12 @@ class VectorQuantizer(nn.Module):
             'w': inputs.size()[2],
             'c': inputs.size()[3]
         }
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input, **kwargs)
+        loss, quantized, perplexity, encoding_indices = self._forward(inputs, flat_input, **kwargs)
 
         # convert quantized from BHWC -> BCHW
         quantized = rearrange(quantized, self.p_flatten)
-        return loss, quantized, perplexity, encodings
+        encoding_indices = rearrange(encoding_indices.squeeze(), self.p_code, b=kwargs['b'], h=kwargs['h'], w=kwargs['w'])
+        return loss, quantized, perplexity, encoding_indices
 
 
 @attr.s(repr=False, eq=False)
@@ -93,6 +95,7 @@ class VectorQuantizerEMA(nn.Module):
         self.p_space_last = 'b h w c -> b c h w'
         self.p_group = 'b h w c -> (b h w) c'
         self.p_flatten = '(b h w) c -> b h w c'
+        self.p_code = '(b h w) -> b h w'
 
     def _forward(self, inputs: torch.Tensor, flat_input: torch.Tensor, **kwargs) -> Tuple[torch.Tensor]:
         # inputs shape: [b h w c]
@@ -136,7 +139,7 @@ class VectorQuantizerEMA(nn.Module):
         avg_probs = torch.mean(encodings, dim=0)
         perplexity = torch.exp(-torch.sum(avg_probs * torch.log(avg_probs + 1e-10)))
 
-        return loss, quantized, perplexity, encodings
+        return loss, quantized, perplexity, encoding_indices
 
     def forward(self, inputs) -> Tuple[torch.Tensor]:
         # convert inputs from BCHW -> BHWC
@@ -150,9 +153,12 @@ class VectorQuantizerEMA(nn.Module):
             'w': inputs.size()[2],
             'c': inputs.size()[3]
         }
-        loss, quantized, perplexity, encodings = self._forward(inputs, flat_input, **kwargs)
+        loss, quantized, perplexity, encoding_indices = self._forward(inputs, flat_input, **kwargs)
 
         # convert quantized from BHWC -> BCHW
         quantized = rearrange(quantized, self.p_space_last)
-        return loss, quantized, perplexity, encodings
+
+        encoding_indices = rearrange(encoding_indices.squeeze(), self.p_code, b=kwargs['b'], h=kwargs['h'], w=kwargs['w'])
+
+        return loss, quantized, perplexity, encoding_indices
 

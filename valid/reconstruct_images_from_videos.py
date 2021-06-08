@@ -3,7 +3,7 @@ from einops import rearrange
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchvision.transforms import transforms
 
-from models.vq_vae.vq_vae0.vq_vae import VqVae
+from models.vq_vae.vq_vae1.vq_vae import VqVae1 as VqVae
 from train.train_utils import load_checkpoint, NormalizeInverse, train_visualize, save_images
 from train.videos.video_utils import video_pipe, list_videos2, params
 
@@ -50,10 +50,8 @@ if __name__ == '__main__':
     data_args['seed'] = random.randint(0, 100)
     data_args['training_data_files'] = list_videos2('/data/Doraemon/video_clips/256x256/')
 
-    model_id = '2021-05-27'
-    checkpoint_file = 'checkpoint24000.pth.tar'
+    model_id = '2021-06-07'
+    checkpoint_file = 'checkpoint34000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
-    device_id = 0
-    batch_size = 16
-    num_threads = 2
+
     reconstruct(checkpoint_path, data_args, model_args)

@@ -6,36 +6,11 @@ import attr
 import torch
 from torch import nn
 
-
-@attr.s(eq=False, repr=False)
-class DecoderBlock(nn.Module):
-    n_in: int = attr.ib(validator=lambda i, a, x: x >= 1)
-    n_out: int = attr.ib(validator=lambda i, a, x: x >= 1 and x % 4 == 0)
-    n_layers: int = attr.ib(validator=lambda i, a, x: x >= 1)
-
-    def __attrs_post_init__(self) -> None:
-        super().__init__()
-        self.n_hid = self.n_out // 4
-        self.post_gain = 1 / (self.n_layers ** 2)
-
-        self.id_path = nn.Conv2d(in_channels=self.n_in, out_channels=self.n_out, kernel_size=1) \
-            if self.n_in != self.n_out else nn.Identity()
-        self.res_path = nn.Sequential(OrderedDict([
-            ('relu_1', nn.ReLU()),
-            ('conv_1', nn.Conv2d(in_channels=self.n_in, out_channels=self.n_hid, kernel_size=1)),
-            ('relu_2', nn.ReLU()),
-            ('conv_2', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_3', nn.ReLU()),
-            ('conv_3', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=3, padding=1)),
-            ('relu_4', nn.ReLU()),
-            ('conv_4', nn.Conv2d(in_channels=self.n_hid, out_channels=self.n_out, kernel_size=3, padding=1))]))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.id_path(x) + self.post_gain * self.res_path(x)
+from models.vq_vae.vq_vae0.decoder import DecoderBlock
 
 
 @attr.s(eq=False, repr=False)
-class Decoder(nn.Module):
+class Decoder1(nn.Module):
     group_count: int = attr.ib()
 
     # code book dim

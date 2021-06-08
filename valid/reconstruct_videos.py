@@ -4,7 +4,7 @@ import torch
 from einops import rearrange
 from torchvision.transforms import transforms
 
-from models.vq_vae.vq_vae0.vq_vae import VqVae
+from models.vq_vae.vq_vae1.vq_vae import VqVae1 as VqVae
 from train.train_utils import load_checkpoint, NormalizeInverse
 from train.videos.video_utils import params
 
@@ -27,7 +27,7 @@ def save_video(model, images, normalize, unnormalize):
     return images_recon
 
 
-def reconstruct(checkpoint_path, batch_size, model_args, video_file, resolution=256):
+def reconstruct(checkpoint_path, batch_size, model_args, video_file, max_seq_length, resolution=256):
     checkpoint = load_checkpoint(checkpoint_path, device_id=0)
 
     model = VqVae(**model_args).to('cuda')
@@ -52,7 +52,7 @@ def reconstruct(checkpoint_path, batch_size, model_args, video_file, resolution=
         else:
             break
 
-        if len(raw_seqs) == 16:
+        if len(raw_seqs) == max_seq_length:
             raw_images.append(np.stack(raw_seqs, 0))
             raw_seqs = []
 
@@ -124,12 +124,13 @@ def reconstruct_test(batch_size, video_file, resolution=256):
 
 if __name__ == '__main__':
     model_args = params['model_args']
-    model_id = '2021-05-27'
-    checkpoint_file = 'checkpoint24000.pth.tar'
+    model_id = '2021-06-07'
+    checkpoint_file = 'checkpoint34000.pth.tar'
     checkpoint_path = '/opt/project/data/trained_video/%s/%s' % (model_id, checkpoint_file)
 
     # video_file = '/data/Doraemon/raw/256x256/2014.mp4'
-    video_file = '/data/Doraemon/video_clips/256x256/2014-18.mp4'
-    batch_size = 48
-    reconstruct(checkpoint_path, batch_size, model_args, video_file, resolution=256)
+    video_file = '/data/Doraemon/video_clips/256x256/2014-275.mp4'
+    batch_size = params['data_args']['batch_size']
+    max_seq_length = params['data_args']['sequence_length']
+    reconstruct(checkpoint_path, batch_size, model_args, video_file, max_seq_length, resolution=256)
     # reconstruct_test(batch_size, video_file, resolution=256)
