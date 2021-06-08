@@ -40,18 +40,18 @@ params = {
         'n_blk_per_group': 1,
         'vocab_size': 8192,
         'n_init': 512,
-        'input_channels': 48, # sequence_length * 3
-        'output_channels': 48, # sequence_length * 3
+        'input_channels': 48 * 3, # sequence_length * 3
+        'output_channels': 48 * 3, # sequence_length * 3
         'commitment_cost': 0.25,
         'decay': 0.99
     },
     'data_args': {
-        'batch_size': 48,
+        'batch_size': 32,
         'num_threads': 6,
         'device_id': 0,
         'training_data_files': list_videos2('/data/Doraemon/video_clips/256x256/'),
         'seed': 2021,
-        'sequence_length': 16,
+        'sequence_length': 48,
         'shard_id': 0,
         'num_shards': 1,
         'initial_prefetch_size': 1024

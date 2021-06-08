@@ -12,10 +12,16 @@ from models.vq_vae.vq_vae0.decoder import DecoderBlock
 @attr.s(eq=False, repr=False)
 class Decoder1(nn.Module):
     group_count: int = attr.ib()
+
+    # code book dim
     n_init: int = attr.ib(default=128, validator=lambda i, a, x: x >= 8)
+
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
     n_blk_per_group: int = attr.ib(default=2, validator=lambda i, a, x: x >= 1)
     output_channels: int = attr.ib(default=3, validator=lambda i, a, x: x >= 1)
+
+    # whether upsample spatially
+    upsample: bool = attr.ib(default=True)
 
     def __attrs_post_init__(self) -> None:
         super().__init__()
@@ -37,7 +43,7 @@ class Decoder1(nn.Module):
         n_prev = self.n_init
         n = self.group_count * self.n_hid
         for gid in range(1, self.group_count):
-            decode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev))
+            decode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev, upsample=self.upsample))
             n_prev = n
             n = (self.group_count - gid) * self.n_hid
         decode_blks.append(make_grp(gid=self.group_count, n=self.n_hid, n_prev=n_prev, upsample=False))

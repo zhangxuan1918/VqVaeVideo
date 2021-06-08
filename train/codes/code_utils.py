@@ -17,7 +17,7 @@ params = {
     'data_args': {
         'batch_size': 128,
         'root_dir': '/data/breaking_bad/np_arrays/256x256',
-        'num_workers': 6,
+        'num_workers': 0,
         'max_seq_length': 256, # max frames for each video input
         'padding_file': 'black_images_code_2021-05-25.npy.gz',
     },

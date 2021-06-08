@@ -13,7 +13,7 @@ from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
-from models.vq_vae.vq_vae0.vq_vae import VqVae
+from models.vq_vae.vq_vae1 import VqVae1 as VqVae
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
     train_visualize, save_images
 from train.videos.video_utils import video_pipe
