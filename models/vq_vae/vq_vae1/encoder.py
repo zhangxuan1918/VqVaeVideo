@@ -38,8 +38,8 @@ class Encoder1(nn.Module):
             return f'group_{gid}', nn.Sequential(OrderedDict(blks))
 
         encode_blks = [
-            ('input_compress', make_conv(in_channels=self.input_channels, out_channels=16, kernel_size=1)),
-            ('input_expand', make_conv(in_channels=16, out_channels=self.n_hid, kernel_size=7, padding=3))
+            ('input_expand', make_conv(in_channels=self.input_channels, out_channels=self.n_hid * 4, kernel_size=7, padding=3)),
+            ('input_compress', make_conv(in_channels=self.n_hid * 4, out_channels=self.n_hid, kernel_size=3, padding=1))
         ]
         n, n_prev = self.n_hid, self.n_hid
         for gid in range(1, self.group_count):

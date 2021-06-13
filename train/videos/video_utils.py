@@ -39,7 +39,7 @@ params = {
         'n_hid': 64,
         'n_blk_per_group': 1,
         'vocab_size': 8192,
-        'n_init': 512,
+        'n_init': 2048,
         'input_channels': 48 * 3, # sequence_length * 3
         'output_channels': 48 * 3, # sequence_length * 3
         'commitment_cost': 0.25,
@@ -61,8 +61,8 @@ params = {
         'lr': 1e-4,
         'lr_decay': 0.98,
         'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        # 'folder_name': '/opt/project/data/trained_video/2021-05-08',
-        # 'checkpoint_path': '/opt/project/data/trained_video/2021-05-08/checkpoint25000.pth.tar',
+        # 'folder_name': '/opt/project/data/trained_video/2021-06-10',
+        # 'checkpoint_path': '/opt/project/data/trained_video/2021-06-10/checkpoint43000.pth.tar',
         'checkpoint_path': None
     },
     'use_wandb': False
