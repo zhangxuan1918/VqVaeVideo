@@ -60,7 +60,16 @@ class GPT(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def forward(self, input, embeddings=None, targets=None):
+    def forward(self, input, embeddings=None, targets=None, key_padding_mask=None, need_weights=False, attn_mask=None):
+        # TODO: in training, when passing input, we need to make sure the input have the same length
+        #       if not, we can append black images
+        # targets should be equal to input if embeddings is not null
+        # input: bos, t0, t1, t2, ..., t510
+        # output:     t0, t1, t2, ..., t510, t511
+        # targets:    t0, t1, t2, ..., t510
+        # we use causal transformer, thus, we need to provide a causal attn_mask
+        # mask: torch.tril(torch.ones((max_seq_length, max_seq_length), dtype=torch.uint8)
+
         tok_embeddings = self.tok_embed(input)
 
         # prepend explicit embeddings
@@ -71,12 +80,13 @@ class GPT(nn.Module):
         pos_embedding = self.pos_embed[:, :seq_length, :]
 
         x = self.embed_drop(tok_embeddings + pos_embedding)
-        x = self.blocks(x)
+        x, _, _, _ = self.blocks(x, key_padding_mask, need_weights, attn_mask)
         x = self.layer_norm(x)
         logits = self.head(x)
 
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(rearrange(logits, 'b l v -> (b l) v'), rearrange(targets, 'b l -> (b l)'))
+            # the last token will be discarded
+            loss = F.cross_entropy(rearrange(logits[:, :-1, :], 'b l v -> (b l) v'), rearrange(targets, 'b l -> (b l)'))
 
         return logits, loss

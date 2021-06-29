@@ -89,4 +89,4 @@ class CausalSelfAttentionBlock(nn.Module):
         y = rearrange(y, 'l b e -> b l e')
         y = x + y
         y = y + self.mlp(self.layer_norm2(y))
-        return y
+        return y, key_padding_mask, need_weights, attn_mask
