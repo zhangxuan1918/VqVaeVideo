@@ -4,7 +4,7 @@ import torch
 from einops import rearrange
 from torchvision.transforms import transforms
 
-from models.vq_vae.vq_vae1.vq_vae import VqVae1 as VqVae
+from models.vq_vae.vq_vae1_video.vq_vae import VqVae1 as VqVae
 from train.train_utils import load_checkpoint, NormalizeInverse
 from train.videos.video_utils import params
 

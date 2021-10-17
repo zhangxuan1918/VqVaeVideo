@@ -6,11 +6,14 @@ from einops import rearrange
 from torch import nn
 
 from models.vq_vae.vq_vae0.layer import VectorQuantizerEMA, VectorQuantizer
-from models.vq_vae.vq_vae1 import Encoder1, Decoder1
+from models.vq_vae.vq_vae2_video import Encoder2, Decoder2
 
 
 @attr.s(repr=False, eq=False)
-class VqVae1(nn.Module):
+class VqVae2(nn.Module):
+    """
+    input shape: (b, d, c, h, w) -> (b, d*c, h, w)
+    """
     group_count: int = attr.ib()
     # init hidden features for encoder
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
@@ -29,6 +32,9 @@ class VqVae1(nn.Module):
     # use EMA for quantization
     decay: float = attr.ib(default=0.99, validator=lambda i, a, x: x >= 0.0)
 
+    # video max frames
+    sequence_length: int = attr.ib(default=16, validator=lambda i, a, x: x > 0)
+
     # whether downsample spatially in encoder
     downsample: bool = attr.ib(default=True)
     # whether upsample spatially in decoder
@@ -37,12 +43,13 @@ class VqVae1(nn.Module):
     def __attrs_post_init__(self):
         super().__init__()
 
-        self.encoder = Encoder1(
+        self.encoder = Encoder2(
             group_count=self.group_count,
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
             input_channels=self.input_channels,
             n_init=self.n_init,
+            sequence_length=self.sequence_length,
             downsample=self.downsample
         )
 
@@ -58,19 +65,22 @@ class VqVae1(nn.Module):
                 embedding_dim=self.n_init,
                 commitment_cost=self.commitment_cost)
 
-        self.decoder = Decoder1(
+        self.decoder = Decoder2(
             group_count=self.group_count,
             n_init=self.n_init,
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
+            sequence_length=self.sequence_length,
             output_channels=self.output_channels,
             upsample=self.upsample
         )
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        x = rearrange(x, 'b d h w c -> b (d c) h w')
         z = self.encoder(x)
         loss, quantized, perplexity, _ = self.vq_vae(z)
         x_recon = self.decoder(quantized)
+        x_recon = rearrange(x_recon, 'b (d c) h w -> b d h w c', d=self.sequence_length, c=self.output_channels)
         return loss, x_recon, perplexity
 
     @torch.no_grad()

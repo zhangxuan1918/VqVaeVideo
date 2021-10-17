@@ -62,14 +62,3 @@ class NumpyDataset(Dataset):
         if self.transform:
             codes = self.transform(codes)
         return codes
-
-
-class Rescale(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __init__(self, code_size: float):
-        self.code_size = code_size
-
-    def __call__(self, code: np.ndarray) -> torch.Tensor:
-        code = code / self.code_size
-        return torch.from_numpy(code).float()

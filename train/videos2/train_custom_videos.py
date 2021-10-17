@@ -13,7 +13,7 @@ from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
-from models.vq_vae.vq_vae2 import VqVae2 as VqVae
+from models.vq_vae.vq_vae2_video import VqVae2 as VqVae
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
     train_visualize, save_images
 from train.videos2.video_utils import video_pipe
@@ -93,10 +93,10 @@ class TrainVqVae:
                 images = next(data_iter)[0]['data']
 
             images = images.to('cuda')
-            b, d, _, _, c = images.size()
+            b, d, h, w, c = images.size()
             images = rearrange(images, 'b d h w c -> (b d) c h w')
             images = self.normalize(images.float() / 255.)
-            # images = rearrange(images, '(b d) c h w -> b (d c) h w', b=b, d=d, c=c)
+            images = rearrange(images, '(b d) c h w -> b d h w c', b=b, d=d)
             self.optimizer.zero_grad()
 
             vq_loss, images_recon, perplexity = self.model(images)
@@ -117,7 +117,7 @@ class TrainVqVae:
             if i % 20 == 0:
                 progress.display(i)
 
-            if i % 1000 == 0:
+            if i % 200 == 0:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
                     'steps': i,
@@ -127,7 +127,7 @@ class TrainVqVae:
                 }, 'checkpoint%s.pth.tar' % i)
 
                 self.scheduler.step()
-                images, images_recon = map(lambda t: rearrange(t, '(b d) c h w -> b d c h w', b=b, d=d, c=c), [images, images_recon])
+                images, images_recon = map(lambda t: rearrange(t, 'b d h w c -> b d c h w'), [images, images_recon])
                 images_orig, images_recs = train_visualize(
                     unnormalize=self.unnormalize, images=images[0, :self.n_images_save], n_images=self.n_images_save,
                     image_recs=images_recon[0, :self.n_images_save])

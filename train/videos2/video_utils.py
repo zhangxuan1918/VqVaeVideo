@@ -39,19 +39,20 @@ params = {
         'n_hid': 64,
         'n_blk_per_group': 1,
         'vocab_size': 8192,
-        'n_init': 1024,
+        'n_init': 512,
         'input_channels': 3,
         'output_channels': 3,
         'commitment_cost': 0.25,
-        'decay': 0.99
+        'decay': 0.99,
+        'sequence_length': 30
     },
     'data_args': {
-        'batch_size': 4,
+        'batch_size': 24,
         'num_threads': 6,
         'device_id': 0,
         'training_data_files': list_videos2('/data/Doraemon/video_clips/256x256/'),
         'seed': 2021,
-        'sequence_length': 16,
+        'sequence_length': 30,
         'shard_id': 0,
         'num_shards': 1,
         'initial_prefetch_size': 1024
@@ -61,9 +62,9 @@ params = {
         'lr': 1e-4,
         'lr_decay': 0.98,
         # 'folder_name': '/opt/project/data/trained_video2/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_video2/2021-06-13',
-        'checkpoint_path': '/opt/project/data/trained_video2/2021-06-13/checkpoint66000.pth.tar',
-        # 'checkpoint_path': None
+        'folder_name': '/opt/project/data/trained_video2/2021-10-16',
+        # 'checkpoint_path': '/opt/project/data/trained_video2/2021-06-13/checkpoint66000.pth.tar',
+        'checkpoint_path': None
     },
     'use_wandb': False
 }

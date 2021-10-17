@@ -3,7 +3,7 @@ from einops import rearrange
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torchvision.transforms import transforms
 
-from models.vq_vae.vq_vae1.vq_vae import VqVae1 as VqVae
+from models.vq_vae.vq_vae1_video.vq_vae import VqVae1 as VqVae
 from train.train_utils import load_checkpoint, NormalizeInverse, train_visualize, save_images
 from train.videos.video_utils import video_pipe, list_videos2, params
 

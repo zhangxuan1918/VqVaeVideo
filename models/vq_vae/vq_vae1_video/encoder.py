@@ -11,7 +11,7 @@ from models.vq_vae.vq_vae0.encoder import EncoderBlock
 
 
 @attr.s(repr=False, eq=False)
-class Encoder2(nn.Module):
+class Encoder1(nn.Module):
     group_count: int = attr.ib()
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
     n_blk_per_group: int = attr.ib(default=2, validator=lambda i, a, x: x >= 1)
@@ -40,28 +40,28 @@ class Encoder2(nn.Module):
             return f'spatial_{gid}', nn.Sequential(OrderedDict(blks))
 
         # encode spatially
-        encode_blks_spatial = [('input', make_conv(in_channels=self.input_channels, out_channels=self.n_hid, kernel_size=7, padding=3))]
+        encode_blks = [
+            ('input', nn.Sequential(OrderedDict(
+                [
+                    ('conv_1', make_conv(in_channels=self.input_channels * self.sequence_length, out_channels=4 * self.n_hid, kernel_size=7, padding=3)),
+                    ('relu', nn.ReLU()),
+                    ('conv_2', make_conv(in_channels=4 * self.n_hid, out_channels=self.n_hid, kernel_size=7, padding=3))
+                ]
+             )))
+        ]
         n, n_prev = self.n_hid, self.n_hid
         for gid in range(1, self.group_count):
-            encode_blks_spatial.append(make_grp(gid=gid, n=n, n_prev=n_prev, downsample=self.downsample))
+            encode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev, downsample=self.downsample))
             n_prev = n
             n = (gid + 1) * self.n_hid
-        encode_blks_spatial.append(make_grp(gid=self.group_count, n=n, n_prev=n_prev, downsample=False))
-
-        # encode temporally
-        # shape of input tensor: [b * seq_length, feature, h, w] -> [b, n_channel, h, w]
-        # we downsample, [b, n_channel, h, w] -> [b, self.n_init, h, w]
-        encode_blks_tempo = [
-            (f'tempo', nn.Sequential(OrderedDict([
+        encode_blks.append(make_grp(gid=self.group_count, n=n, n_prev=n_prev, downsample=False))
+        encode_blks.append(
+            ('output', nn.Sequential(OrderedDict([
                 ('relu', nn.ReLU()),
                 ('conv',
-                 make_conv(in_channels=n * self.sequence_length, out_channels=self.n_init, kernel_size=3, padding=1, groups=n))
-            ])))]
-
-        self.blocks_spatial = nn.Sequential(OrderedDict(encode_blks_spatial))
-        self.blocks_tempo = nn.Sequential(OrderedDict(encode_blks_tempo))
+                 make_conv(in_channels=n, out_channels=self.n_init, kernel_size=1))
+            ]))))
+        self.blocks = nn.Sequential(OrderedDict(encode_blks))
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        z = self.blocks_spatial(inputs)
-        z = rearrange(z, '(b d) c h w -> b (c d) h w', d=self.sequence_length)
-        return self.blocks_tempo(z)
+        return self.blocks(inputs)

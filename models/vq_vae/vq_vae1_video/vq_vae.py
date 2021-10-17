@@ -6,11 +6,14 @@ from einops import rearrange
 from torch import nn
 
 from models.vq_vae.vq_vae0.layer import VectorQuantizerEMA, VectorQuantizer
-from models.vq_vae.vq_vae2 import Encoder2, Decoder2
+from models.vq_vae.vq_vae1_video import Encoder1, Decoder1
 
 
 @attr.s(repr=False, eq=False)
-class VqVae2(nn.Module):
+class VqVae1(nn.Module):
+    """
+    input shape: (b, d, c, h, w) -> (b, d*c, h, w)
+    """
     group_count: int = attr.ib()
     # init hidden features for encoder
     n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
@@ -40,7 +43,7 @@ class VqVae2(nn.Module):
     def __attrs_post_init__(self):
         super().__init__()
 
-        self.encoder = Encoder2(
+        self.encoder = Encoder1(
             group_count=self.group_count,
             n_hid=self.n_hid,
             n_blk_per_group=self.n_blk_per_group,
@@ -62,7 +65,7 @@ class VqVae2(nn.Module):
                 embedding_dim=self.n_init,
                 commitment_cost=self.commitment_cost)
 
-        self.decoder = Decoder2(
+        self.decoder = Decoder1(
             group_count=self.group_count,
             n_init=self.n_init,
             n_hid=self.n_hid,
@@ -73,9 +76,11 @@ class VqVae2(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        x = rearrange(x, 'b d h w c -> b (d c) h w')
         z = self.encoder(x)
         loss, quantized, perplexity, _ = self.vq_vae(z)
         x_recon = self.decoder(quantized)
+        x_recon = rearrange(x_recon, 'b (d c) h w -> b d h w c', d=self.sequence_length, c=self.output_channels)
         return loss, x_recon, perplexity
 
     @torch.no_grad()

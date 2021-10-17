@@ -36,6 +36,10 @@ class GPT(nn.Module):
         self.pos_embed = nn.Parameter(torch.zeros(1, self.max_seq_length, self.embed_dim))
         self.embed_drop = nn.Dropout(self.embed_dropout_prob)
 
+        # attention mask
+        attn_mask = torch.tril(torch.ones((self.max_seq_length, self.max_seq_length), dtype=torch.uint8)).to('cuda')
+        self.register_buffer('attn_mask', attn_mask)
+
         # transformer
         trans_blks = [(f'group_{i}', CausalSelfAttentionBlock(
                 embed_dim=self.embed_dim,
@@ -60,7 +64,7 @@ class GPT(nn.Module):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def forward(self, input, embeddings=None, targets=None, key_padding_mask=None, need_weights=False, attn_mask=None):
+    def forward(self, input, embeddings=None, targets=None, **kwargs):
         # TODO: in training, when passing input, we need to make sure the input have the same length
         #       if not, we can append black images
         # targets should be equal to input if embeddings is not null
@@ -80,7 +84,7 @@ class GPT(nn.Module):
         pos_embedding = self.pos_embed[:, :seq_length, :]
 
         x = self.embed_drop(tok_embeddings + pos_embedding)
-        x, _, _, _ = self.blocks(x, key_padding_mask, need_weights, attn_mask)
+        x, _, _, _ = self.blocks(x, self.attn_mask, **kwargs)
         x = self.layer_norm(x)
         logits = self.head(x)
 

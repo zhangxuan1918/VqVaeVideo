@@ -2,17 +2,14 @@ import datetime
 
 params = {
     'model_args': {
-        'group_count': 4,
-        'n_hid': 64,
-        'n_blk_per_group': 1,
         'vocab_size': 8192,
-        'n_init': 512,
-        'input_channels': 256,
-        'output_channels': 256,
-        'downsample': False, # no downsampling as we compress in time dim
-        'upsample': False,
-        'commitment_cost': 0.25,
-        'decay': 0.99
+        'max_seq_length': 512,
+        'num_layers': 6,
+        'num_heads': 8,
+        'embed_dim': 512,
+        'embed_dropout_prob': 0.1,
+        'mlp_dropout_prob': 0.1,
+        'attn_dropout_prob': 0.1
     },
     'data_args': {
         'batch_size': 128,

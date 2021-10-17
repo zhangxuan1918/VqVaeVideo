@@ -78,7 +78,7 @@ class CausalSelfAttentionBlock(nn.Module):
             nn.Dropout(self.mlp_dropout_prob)
         )
 
-    def forward(self, x, key_padding_mask=None, need_weights=False, attn_mask=None):
+    def forward(self, x, attn_mask=None, key_padding_mask=None, need_weights=False):
         y = self.layer_norm1(x)
         y, _ = self.attention(
             x=y,
@@ -89,4 +89,4 @@ class CausalSelfAttentionBlock(nn.Module):
         y = rearrange(y, 'l b e -> b l e')
         y = x + y
         y = y + self.mlp(self.layer_norm2(y))
-        return y, key_padding_mask, need_weights, attn_mask
+        return y, attn_mask, key_padding_mask, need_weights

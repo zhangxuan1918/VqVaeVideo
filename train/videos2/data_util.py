@@ -1,4 +1,5 @@
 import os
+import random
 from collections import Callable
 from typing import Optional
 
@@ -23,7 +24,8 @@ class VideoDataset(Dataset):
             self,
             root_dir: str,
             max_seq_length: int,
-            transform: Optional[Callable] = None
+            transform: Optional[Callable] = None,
+            seed=None
     ) -> None:
 
         meta_file = os.path.join(root_dir, 'meta.csv')
@@ -34,6 +36,7 @@ class VideoDataset(Dataset):
         # black images as padding
         # if the #frames in the video < max_seq_length, we pad black images
         self.padding = np.zeros((1, 256, 256, 3))
+        random.seed(seed)
 
     def __len__(self):
         return len(self.video_files)
@@ -52,8 +55,6 @@ class VideoDataset(Dataset):
                 frames.append(frame)
             else:
                 break
-            if len(frames) == self.max_seq_length:
-                break
         video_in.release()
         cv2.destroyAllWindows()
 
@@ -63,6 +64,10 @@ class VideoDataset(Dataset):
             # pad more frames
             pad = np.repeat(self.padding, self.max_seq_length - n, axis=0)
             video = np.concatenate([video, pad], axis=0)
+        elif n > self.max_seq_length:
+            # sample frames
+            r = random.randint(0, n-self.max_seq_length)
+            video = video[r: r+self.max_seq_length]
 
         if self.transform:
             video = self.transform(video)

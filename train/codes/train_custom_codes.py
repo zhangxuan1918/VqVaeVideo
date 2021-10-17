@@ -6,20 +6,20 @@ import attr
 import torch
 import torch.nn.functional as F
 import wandb
+from einops import rearrange
 from torch import nn
 from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
-from models.vq_vae.vq_vae0.vq_vae import VqVae
-from train.codes.data_util import NumpyDataset, Rescale
+from models.transformer.gpt.gpt import GPT
+from train.codes.data_util import NumpyDataset
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse
 
 
 @attr.s(eq=False, repr=False)
-class TrainVqVae:
+class TrainGPT:
     model: nn.Module = attr.ib()
-    unnormalize: nn.Module = attr.ib()
     training_loader: torch.utils.data.DataLoader = attr.ib()
     run_wandb: Union[Run, RunDisabled, None] = attr.ib()
     num_steps: int = attr.ib()
@@ -27,10 +27,16 @@ class TrainVqVae:
     lr_decay: float = attr.ib()
     folder_name: str = attr.ib()
     checkpoint_path: str = attr.ib(default=None)
+
+    patch_length: int = attr.ib(default=4, validator=lambda i, a, x: x & 1 == 0) # 4x4 path for each code when feeding to transformer
+    max_frame_length: int = attr.ib(default=30)
+    embed_dim: int = attr.ib(default=512)
+
     n_images_save: int = attr.ib(default=16)
 
     def __attrs_post_init__(self):
-
+        # max seq length for transformer: 1 (bos) + path_length ** 2 * num_frames (tokens)
+        self.max_seq_length = 1 + self.max_frame_length * (self.patch_length ** 2)
         self.path_img_orig = os.path.join(self.folder_name, 'images_orig')
         self.path_img_recs = os.path.join(self.folder_name, 'images_recs')
         if not os.path.exists(self.folder_name):
@@ -62,6 +68,48 @@ class TrainVqVae:
     def scheduler(self):
         return torch.optim.lr_scheduler.ExponentialLR(self.optimizer, gamma=self.lr_decay)
 
+    def _train_helper(self, _input: torch.Tensor) -> torch.Tensor:
+        # scan the video code where each frame is encoded by vqvae
+        # each time, we have a small patch of size (batch, patch_size, patch_size) from the original full code
+        # we flatten it to (batch, patch_size ** 2), then feed it to the transformer
+        b, h, w = _input.size()
+        patch_half = self.patch_length / 2
+        total_loss = 0.0
+        # the beginning token
+        bos = torch.zeros((b, self.embed_dim))
+        for r in range(0, h):
+            if r <= patch_half:
+                # row left upper
+                i = r
+            elif h - r < patch_half:
+                # row left bottom
+                i = self.patch_length - (h - r)
+            else:
+                # row middle
+                i = patch_half
+            for c in range(0, w):
+                if c <= patch_half:
+                    # column left upper
+                    j = c
+                elif w - c < patch_half:
+                    # column right upper
+                    j = self.patch_length - (w - c)
+                else:
+                    # column middle
+                    j = patch_half
+
+                i_start = r - i
+                i_end = i_start + self.patch_length
+                j_start = c - j
+                j_end = j_start + self.patch_length
+                patch = _input[:, i_start:i_end, j_start:j_end]
+                patch = rearrange(patch, 'b h w -> b (h w)')
+                logits, loss = self.model(input=patch, embeddings=bos, targets=patch)
+                # update the beginning to be the last token predicted
+                bos = logits[:, -1, :]
+                total_loss += loss
+        return total_loss / (w * h)
+
     def train(self):
         self.model.train()
 
@@ -91,9 +139,8 @@ class TrainVqVae:
             codes = codes.to('cuda')
             self.optimizer.zero_grad()
 
-            vq_loss, codes_recon, perplexity = self.model(codes)
-            recon_error = F.mse_loss(codes_recon, codes)
-            loss = recon_error + vq_loss
+            # we need to feed patch from code to model
+            loss = self._train_helper(codes)
             loss.backward()
 
             self.optimizer.step()
