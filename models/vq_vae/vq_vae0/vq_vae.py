@@ -81,6 +81,10 @@ class VqVae(nn.Module):
 
     @torch.no_grad()
     def decode(self, encode_indices: torch.Tensor) -> torch.Tensor:
+        return self.decoder(self.code2quantized(encode_indices))
+
+    @torch.no_grad()
+    def code2quantized(self, encode_indices: torch.Tensor) -> torch.Tensor:
         b, h, w = encode_indices.size()
         encode_indices = rearrange(encode_indices, 'b h w -> (b h w) 1').to(torch.int64)
         encodings = torch.zeros(encode_indices.shape[0], self.vq_vae.num_embeddings, device=encode_indices.device)
@@ -88,4 +92,8 @@ class VqVae(nn.Module):
         quantized = rearrange(torch.matmul(encodings, self.vq_vae.embedding.weight), self.vq_vae.p_flatten,
                               b=b, h=h, w=w)
         quantized = rearrange(quantized, self.vq_vae.p_space_last)
+        return quantized
+
+    @torch.no_grad()
+    def quantized2image(self, quantized: torch.Tensor) -> torch.Tensor:
         return self.decoder(quantized)

@@ -1,75 +1,61 @@
+import gzip
 import os
 import random
-from collections import Callable
-from typing import Optional
 
-import cv2
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 from torch.utils.data import Dataset
-from torchvision.datasets.folder import pil_loader
 
 
-class VideoDataset(Dataset):
+class VideoNumpyDataset(Dataset):
     """
-    load unlabeled video data from a folder
+    load unlabeled numpy data from a folder
 
     inside the folder
-        * meta.csv: a file contains a list of video names
-        * videos
+        * meta.csv: a file contains a list of image names
+        * numpy gziped files
     """
 
     def __init__(
             self,
             root_dir: str,
-            max_seq_length: int,
-            transform: Optional[Callable] = None,
-            seed=None
+            sequence_length: int,
+            padding_file: str,  # numpy file for black image code, we use it to pad in case the sequence length is small
     ) -> None:
 
         meta_file = os.path.join(root_dir, 'meta.csv')
-        self.video_files = pd.read_csv(meta_file)
+        self.numpy_files = pd.read_csv(meta_file)
         self.root_dir = root_dir
-        self.max_seq_length = max_seq_length
-        self.transform = transform
-        # black images as padding
-        # if the #frames in the video < max_seq_length, we pad black images
-        self.padding = np.zeros((1, 256, 256, 3))
-        random.seed(seed)
+
+        # for video codes, the np array has shape [#frame, 32, 32]
+        # we only keep #max_seq_length frames
+        self.sequence_length = sequence_length
+
+        with gzip.GzipFile(padding_file, 'r') as f:
+            self.padding = np.load(f).astype(np.int)
 
     def __len__(self):
-        return len(self.video_files)
+        return self.numpy_files.shape[0]
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> np.ndarray:
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
-        video_file = os.path.join(self.root_dir, self.video_files.iloc[idx, 0])
-        video_in = cv2.VideoCapture(video_file)
-        frames = []
+        file_name = os.path.join(self.root_dir, self.numpy_files.iloc[idx, 0])
+        with gzip.GzipFile(file_name, 'r') as f:
+            codes = np.load(f).astype(np.int)
 
-        while video_in.isOpened():
-            ret, frame = video_in.read()
-            if ret:
-                frames.append(frame)
-            else:
-                break
-        video_in.release()
-        cv2.destroyAllWindows()
+        n = codes.shape[0]
 
-        video = np.stack(frames, 0)
-        n = video.shape[0]
-        if n < self.max_seq_length:
+        if n < self.sequence_length:
             # pad more frames
-            pad = np.repeat(self.padding, self.max_seq_length - n, axis=0)
-            video = np.concatenate([video, pad], axis=0)
-        elif n > self.max_seq_length:
-            # sample frames
-            r = random.randint(0, n-self.max_seq_length)
-            video = video[r: r+self.max_seq_length]
+            pad = np.repeat(self.padding, self.sequence_length - n, axis=0)
+            codes = np.concatenate([codes, pad], axis=0)
+        elif n > self.sequence_length:
+            # randomly select `sequence_length` frames
+            s = random.randint(0, n-self.sequence_length)
+            codes = codes[s:s + self.sequence_length]
 
-        if self.transform:
-            video = self.transform(video)
-        video = np.transpose(video, (0, 3, 1, 2))
-        return video
+        return codes

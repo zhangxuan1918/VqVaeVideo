@@ -1,82 +1,44 @@
 from collections import OrderedDict
-from functools import partial
-from typing import Tuple
 
 import attr
+import numpy as np
 import torch
-from einops import rearrange
 from torch import nn
-
-@attr.s(repr=False, eq=False)
-class EncoderBlock3d(nn.Module):
-    n_in: int = attr.ib(validator=lambda i, a, x: x >= 1)
-    n_out: int = attr.ib(validator=lambda i, a, x: x >= 1 and x % 4 == 0)
-    n_layers: int = attr.ib(validator=lambda i, a, x: x >= 1)
-
-    def __attrs_post_init__(self) -> None:
-        super().__init__()
-        self.n_hid = self.n_out // 4
-        self.post_gain = 1 / (self.n_layers ** 2)
-
-        self.id_path = nn.Conv3d(in_channels=self.n_in, out_channels=self.n_out, kernel_size=1) \
-            if self.n_in != self.n_out else nn.Identity()
-        self.res_path = nn.Sequential(OrderedDict([
-            ('relu_1', nn.ReLU()),
-            ('conv_1', nn.Conv3d(in_channels=self.n_in, out_channels=self.n_hid, kernel_size=7, padding=3)),
-            ('relu_2', nn.ReLU()),
-            ('conv_2', nn.Conv3d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=7, padding=3)),
-            ('relu_3', nn.ReLU()),
-            ('conv_3', nn.Conv3d(in_channels=self.n_hid, out_channels=self.n_hid, kernel_size=7, padding=3)),
-            ('relu_4', nn.ReLU()),
-            ('conv_4', nn.Conv3d(in_channels=self.n_hid, out_channels=self.n_out, kernel_size=1)),
-        ]))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.id_path(x) + self.post_gain * self.res_path(x)
 
 
 @attr.s(repr=False, eq=False)
 class Encoder2(nn.Module):
     group_count: int = attr.ib()
-    n_hid: int = attr.ib(default=256, validator=lambda i, a, x: x >= 64)
-    n_blk_per_group: int = attr.ib(default=2, validator=lambda i, a, x: x >= 1)
-    input_channels: int = attr.ib(default=3, validator=lambda i, a, x: x >= 1)
+
+    # codebook dim from first VQ-VAE encoder
+    n_hid: int = attr.ib(default=512, validator=lambda i, a, x: x > 0)
     # codebook dim
     n_init: int = attr.ib(default=128, validator=lambda i, a, x: x > 0)
-    # video max frames
-    sequence_length: int = attr.ib(default=16, validator=lambda i, a, x: x > 0)
-    # whether downsample spatially
-    downsample: bool = attr.ib(default=True)
+    # video max frames, must be 2^v
+    sequence_length: int = attr.ib(default=16, validator=lambda i, a, x: np.exp2(np.log2(x).astype(int)) == x)
+    # conv groups, to reduce memory cost
+    n_group: int = attr.ib(default=4, validator=lambda i, a, x: x > 0)
 
     def __attrs_post_init__(self):
         super().__init__()
 
-        blk_range = range(self.n_blk_per_group)
-        n_layers = self.group_count * self.n_blk_per_group
-
         make_conv = nn.Conv2d
-        make_blk = partial(EncoderBlock, n_layers=n_layers)
-
-        def make_grp(gid: int, n: int, n_prev, downsample: bool = True) -> Tuple[str, nn.Sequential]:
-            blks = [(f'block_{i + 1}', make_blk(n_in=n_prev if i == 0 else n, n_out=n)) for
-                    i in blk_range]
-            if downsample:
-                blks += [('pool', nn.MaxPool3d(kernel_size=2))]
-            return f'spatial_{gid}', nn.Sequential(OrderedDict(blks))
-
-        # encode spatially
+        # input shape: (b, d, c, h, w) -> (b, d*c, h, w)
+        # only conv layer applied
+        n_prev = self.n_hid * self.sequence_length
+        n = n_prev // 4
         encode_blks = []
-        n, n_prev = self.n_hid, self.n_hid
         for gid in range(1, self.group_count):
-            encode_blks.append(make_grp(gid=gid, n=n, n_prev=n_prev, downsample=self.downsample))
+            encode_blks.append(
+                (f'group_{gid}', nn.Sequential(OrderedDict([
+                    ('conv', make_conv(in_channels=n_prev, out_channels=n, kernel_size=3, padding=1, groups=n_prev // self.n_group)),
+                    ('relu', nn.ReLU())
+                ]))))
             n_prev = n
-            n = (gid + 1) * self.n_hid
-        encode_blks.append(make_grp(gid=self.group_count, n=n, n_prev=n_prev, downsample=False))
+            n //= 4
         encode_blks.append(
             ('output', nn.Sequential(OrderedDict([
-                ('relu', nn.ReLU()),
-                ('conv',
-                 make_conv(in_channels=n, out_channels=self.n_init, kernel_size=1))
+                ('conv', make_conv(in_channels=n_prev, out_channels=self.n_init, kernel_size=1))
             ]))))
         self.blocks = nn.Sequential(OrderedDict(encode_blks))
 

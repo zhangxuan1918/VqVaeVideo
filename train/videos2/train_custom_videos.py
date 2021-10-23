@@ -7,21 +7,22 @@ import torch
 import torch.nn.functional as F
 import wandb
 from einops import rearrange
-from nvidia.dali.plugin.pytorch import DALIGenericIterator
 from torch import nn
 from torchvision.transforms import transforms
 from wandb.sdk.lib import RunDisabled
 from wandb.sdk.wandb_run import Run
 
-from models.vq_vae.vq_vae2_video import VqVae2 as VqVae
+from models.vq_vae.vq_vae0 import VqVae
+from models.vq_vae.vq_vae2_video import VqVae2
 from train.train_utils import get_model_size, save_checkpoint, AverageMeter, ProgressMeter, NormalizeInverse, \
     train_visualize, save_images
-from train.videos2.video_utils import video_pipe
+from train.videos2.data_util import VideoNumpyDataset
 
 
 @attr.s(eq=False, repr=False)
 class TrainVqVae:
     model: nn.Module = attr.ib()
+    model_img: nn.Module = attr.ib()
     normalize: nn.Module = attr.ib()
     unnormalize: nn.Module = attr.ib()
     training_loader: torch.utils.data.DataLoader = attr.ib()
@@ -75,11 +76,11 @@ class TrainVqVae:
         meter_loss_constr = AverageMeter('Constr', ':6.2f')
         meter_loss_perp = AverageMeter('Perplexity', ':6.2f')
         progress = ProgressMeter(
-            self.training_loader.epoch_size()['__Video_0'],
+            len(self.training_loader),
             [batch_time, data_time, meter_loss, meter_loss_constr, meter_loss_perp],
             prefix="Steps: [{}]".format(self.num_steps))
 
-        data_iter = DALIGenericIterator(self.training_loader, ['data'], auto_reset=True)
+        data_iter = iter(self.training_loader)
         end = time.time()
 
         for i in range(self.start_steps, self.num_steps):
@@ -87,20 +88,19 @@ class TrainVqVae:
             data_time.update(time.time() - end)
 
             try:
-                images = next(data_iter)[0]['data']
+                codes = next(data_iter)
             except StopIteration:
-                data_iter.reset()
-                images = next(data_iter)[0]['data']
-
-            images = images.to('cuda')
-            b, d, h, w, c = images.size()
-            images = rearrange(images, 'b d h w c -> (b d) c h w')
-            images = self.normalize(images.float() / 255.)
-            images = rearrange(images, '(b d) c h w -> b d h w c', b=b, d=d)
+                data_iter = iter(self.training_loader)
+                codes = next(data_iter)
+            codes = codes.to('cuda')
+            b, d, _, _ = codes.shape
+            codes = rearrange(codes, 'b d h w -> (b d) h w')
+            quantized = self.model_img.code2quantized(codes)
+            quantized = rearrange(quantized, '(b d) c h w -> b d c h w', b=b, d=d)
             self.optimizer.zero_grad()
 
-            vq_loss, images_recon, perplexity = self.model(images)
-            recon_error = F.mse_loss(images_recon, images)
+            vq_loss, quantized_recon, perplexity = self.model(quantized)
+            recon_error = F.mse_loss(quantized_recon, quantized)
             loss = recon_error + vq_loss
             loss.backward()
 
@@ -114,10 +114,10 @@ class TrainVqVae:
             batch_time.update(time.time() - end)
             end = time.time()
 
-            if i % 20 == 0:
+            if i % 200 == 0:
                 progress.display(i)
 
-            if i % 200 == 0:
+            if i % 2000 == 0:
                 print('saving ...')
                 save_checkpoint(self.folder_name, {
                     'steps': i,
@@ -127,10 +127,10 @@ class TrainVqVae:
                 }, 'checkpoint%s.pth.tar' % i)
 
                 self.scheduler.step()
-                images, images_recon = map(lambda t: rearrange(t, 'b d h w c -> b d c h w'), [images, images_recon])
+                quantized_sample, quantized_recon_sample = map(lambda t: t[0, :self.n_images_save], [quantized, quantized_recon])
+                images, images_recon = map(lambda t: self.model_img.quantized2image(t), [quantized_sample, quantized_recon_sample])
                 images_orig, images_recs = train_visualize(
-                    unnormalize=self.unnormalize, images=images[0, :self.n_images_save], n_images=self.n_images_save,
-                    image_recs=images_recon[0, :self.n_images_save])
+                    unnormalize=self.unnormalize, images=images, n_images=self.n_images_save, image_recs=images_recon)
 
                 save_images(file_name=os.path.join(self.path_img_orig, f'image_{i}.png'), image=images_orig)
                 save_images(file_name=os.path.join(self.path_img_recs, f'image_{i}.png'), image=images_recs)
@@ -153,6 +153,14 @@ class TrainVqVae:
         }, 'checkpoint%s.pth.tar' % self.num_steps)
 
 
+def restore_eval_model(model_args, classObject, checkpoint_path):
+    model = classObject(**model_args)
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['state_dict'])
+    model.eval()
+    return model
+
+
 def train_videos():
     from video_utils import params
     data_args = params['data_args']
@@ -162,7 +170,7 @@ def train_videos():
     if params['use_wandb']:
         wandb.login(key=os.environ['wanda_api_key'])
         run_wandb = wandb.init(
-            project='dalle_train_vae',
+            project='video-vae',
             job_type='train_model',
             config=params,
             resume=train_args['checkpoint_path'] is not None
@@ -170,20 +178,25 @@ def train_videos():
     else:
         run_wandb = RunDisabled()
 
-    model = VqVae(**model_args).to('cuda')
-    print('num of trainable parameters: %d' % get_model_size(model))
+    from train.images.image_utils import params as params2
+    model_img = restore_eval_model(params2['model_args'], VqVae, params['image_checkpoint_path']).to('cuda')
+    model = VqVae2(**model_args).to('cuda')
     print(model)
+    print('num of trainable parameters: %d' % get_model_size(model))
 
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     unnormalize = NormalizeInverse(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    training_loader = video_pipe(batch_size=data_args['batch_size'],
-                                 num_threads=data_args['num_threads'],
-                                 device_id=data_args['device_id'],
-                                 filenames=data_args['training_data_files'],
-                                 seed=data_args['seed'])
-    training_loader.build()
 
-    train_object = TrainVqVae(model=model, training_loader=training_loader, run_wandb=run_wandb,
+    training_data = VideoNumpyDataset(
+        root_dir=data_args['root_dir'],
+        sequence_length=data_args['sequence_length'],
+        padding_file=data_args['padding_file']
+    )
+
+    training_loader = torch.utils.data.DataLoader(
+        training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])
+
+    train_object = TrainVqVae(model=model, model_img=model_img, training_loader=training_loader, run_wandb=run_wandb,
                               normalize=normalize, unnormalize=unnormalize,
                               **train_args)
     try:

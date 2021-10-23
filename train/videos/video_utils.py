@@ -61,9 +61,9 @@ params = {
         'num_steps': 160000,
         'lr': 1e-4,
         'lr_decay': 0.98,
-        # 'folder_name': '/opt/project/data/trained_video2/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_video2/2021-10-16',
-        # 'checkpoint_path': '/opt/project/data/trained_video2/2021-06-13/checkpoint66000.pth.tar',
+        # 'folder_name': '/opt/project/data/trained_video/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        'folder_name': '/opt/project/data/trained_video/2021-10-17',
+        # 'checkpoint_path': '/opt/project/data/trained_video/2021-06-13/checkpoint66000.pth.tar',
         'checkpoint_path': None
     },
     'use_wandb': False
