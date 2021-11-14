@@ -97,3 +97,21 @@ class NormalizeInverse(Normalize):
 
     def __call__(self, tensor):
         return super().__call__(tensor.clone())
+
+
+class NormalizeDummy(torch.nn.Module):
+    """
+    dummy normalizer to pass input through
+    """
+
+    def __call__(self, tensor):
+        return tensor
+
+
+class NormalizeInverseDummy(torch.nn.Module):
+    """
+    dummy normalizer to pass input through
+    """
+
+    def __call__(self, tensor):
+        return tensor

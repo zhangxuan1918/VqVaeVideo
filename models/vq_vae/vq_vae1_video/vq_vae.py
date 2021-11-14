@@ -76,11 +76,12 @@ class VqVae1(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        b, d, _, _, _ = x.size()
         x = rearrange(x, 'b d h w c -> b (d c) h w')
         z = self.encoder(x)
         loss, quantized, perplexity, _ = self.vq_vae(z)
         x_recon = self.decoder(quantized)
-        x_recon = rearrange(x_recon, 'b (d c) h w -> b d h w c', d=self.sequence_length, c=self.output_channels)
+        x_recon = rearrange(x_recon, 'b (d c) h w -> b d h w c', b=b, d=d, c=self.output_channels)
         return loss, x_recon, perplexity
 
     @torch.no_grad()

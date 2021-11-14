@@ -34,31 +34,37 @@ def list_videos2(video_folder):
 
 
 params = {
-    'image_checkpoint_path': f'/opt/project/data/trained_image/2021-05-25/checkpoint80000.pth.tar',
     'model_args': {
         'group_count': 4,
-        'n_hid': 512,
+        'n_hid': 64,
+        'n_blk_per_group': 1,
         'vocab_size': 8192,
-        'n_init': 768,
+        'n_init': 512,
+        'input_channels': 3,
+        'output_channels': 3,
         'commitment_cost': 0.25,
         'decay': 0.99,
-        'sequence_length': 32
+        'sequence_length': 30
     },
     'data_args': {
-        'batch_size': 4,
-        'root_dir': '/data/Doraemon/np_arrays/256x256',
-        'num_workers': 8,
-        'sequence_length': 32,
-        'padding_file': 'black_images_code_2021-05-25.npy.gz'
+        'batch_size': 24,
+        'num_threads': 6,
+        'device_id': 0,
+        'training_data_files': list_videos2('/data/Doraemon/video_clips/256x256/'),
+        'seed': 2021,
+        'sequence_length': 30,
+        'shard_id': 0,
+        'num_shards': 1,
+        'initial_prefetch_size': 1024
     },
     'train_args': {
         'num_steps': 160000,
         'lr': 1e-4,
         'lr_decay': 0.98,
-        # 'folder_name': '/opt/project/data/trained_video2/' + datetime.datetime.today().strftime('%Y-%m-%d'),
-        'folder_name': '/opt/project/data/trained_video2/2021-10-23',
-        'checkpoint_path': '/opt/project/data/trained_video2/2021-10-23/checkpoint32000.pth.tar',
-        # 'checkpoint_path': None
+        'folder_name': '/opt/project/data/trained_video4/' + datetime.datetime.today().strftime('%Y-%m-%d'),
+        # 'folder_name': '/opt/project/data/trained_video/2021-10-17',
+        # 'checkpoint_path': '/opt/project/data/trained_video/2021-06-13/checkpoint66000.pth.tar',
+        'checkpoint_path': None
     },
     'use_wandb': False
 }
