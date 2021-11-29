@@ -43,10 +43,8 @@ class VGPT(nn.Module):
         :param x: tokens, shape [b, l]
         :return:
         """
-        # x = x[..., :-1]
-        # we do not use the last token
         logits = self.gpt(x=x, attn_mask=self.attn_mask)
-        y = logits[:, 1:]
+        y = logits[:, :-1]
         loss = None
         if comp_loss:
             # cross entropy with smoothed label
@@ -103,7 +101,7 @@ class VGPT(nn.Module):
                     j_start = dy - j
                     j_end = j_start + patch_size
 
-                    xx = rearrange(x[:, i_start:i_end, j_start:j_end], 'b f p q -> b (f p q)').to('cuda')
+                    xx = rearrange(x[..., i_start:i_end, j_start:j_end], 'b f p q -> b (f p q)').to('cuda')
                     logits, _ = self.forward(x=xx, comp_loss=False)
                     logits = rearrange(logits, 'b (f p q) d -> b f p q d', f=f, p=patch_size, q=patch_size)
                     logits = logits[:, k, i, j]
