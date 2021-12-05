@@ -1,8 +1,10 @@
 import os.path
+import random
 import time
 from typing import Union, Optional
 
 import attr
+import numpy as np
 import torch
 import wandb
 from einops import rearrange
@@ -29,7 +31,7 @@ class TrainGPT:
     # one image has 32x32 code from vqvae which is too big, we input smaller patch into transformer
     # the patch has size [patch_size, patch_size] with stride
     patch_size: int = attr.ib(default=4)
-    stride: int = attr.ib(default=2)
+    stride: int = attr.ib(default=4)
 
     def __attrs_post_init__(self):
         if not os.path.exists(self.folder_name):
@@ -69,6 +71,10 @@ class TrainGPT:
 
         data_iter = iter(self.training_loader)
         end = time.time()
+        # the input x consists of n_frames of small patch
+        # each patch has size: (patch_size, patch_size)
+        # thus the length of input x is: 1 (start token) + n_frames * patch_size ** 2
+        n_frames = (self.model.max_seq_length - 1) // (self.patch_size ** 2)
         for i in range(self.start_steps, self.num_steps):
             try:
                 # codes shape: [b, f, 32, 32]
@@ -77,15 +83,21 @@ class TrainGPT:
                 data_iter = iter(self.training_loader)
                 codes = next(data_iter)
 
+            # sample codes, we have 120 frames (5s) from data pipeline
+            # we sample 16 frames randomly
+            frame_indices = np.sort(np.random.choice(range(codes.size(1)), n_frames, replace=False))
+            codes = codes[:, frame_indices]
+            x_start = random.randint(0, self.stride)
+            y_start = random.randint(0, self.stride)
             # create patch, patch size 4x4
             h, w = codes.size()[2:]
-            for dx in range(0, h - self.patch_size, self.stride):
-                for dy in range(0, w - self.patch_size, self.stride):
+            for dx in range(x_start, h - self.patch_size, self.stride):
+                for dy in range(y_start, w - self.patch_size, self.stride):
                     x = codes[:, :, dx:dx + self.patch_size, dy:dy + self.patch_size]
                     x = rearrange(x, 'b f h w -> b (f h w)').to('cuda')
                     self.optimizer.zero_grad()
 
-                    logits, loss = self.model(x)
+                    logits, loss = self.model(x, frame_indices)
                     loss.backward()
 
                     self.optimizer.step()
@@ -153,8 +165,8 @@ def train_gpt():
 
     training_data = NumpyDataset(
         root_dir=data_args['root_dir'],
-        max_seq_length=data_args['max_seq_length'],
-        padding_file=data_args['padding_file']
+        max_frame_length=data_args['max_frame_length'],
+        vqvae_vocab_size=data_args['vocab_size']
     )
     training_loader = torch.utils.data.DataLoader(
         training_data, batch_size=data_args['batch_size'], shuffle=True, num_workers=data_args['num_workers'])

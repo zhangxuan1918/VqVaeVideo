@@ -1,9 +1,14 @@
 import datetime
 
+VOCAB_SIZE = 8192
+MAX_FRAME_LENGTH = 120
+
 params = {
     'model_args': {
-        'vocab_size': 8192,
+        'vocab_size': VOCAB_SIZE,
         'max_seq_length': 257,
+        'max_frame_length': MAX_FRAME_LENGTH,
+        'patch_size': 4,
         'num_layers': 6,
         'num_heads': 8,
         'embed_dim': 512,
@@ -16,8 +21,8 @@ params = {
         'batch_size': 128,
         'root_dir': '/data/Doraemon/np_arrays/256x256',
         'num_workers': 6,
-        'max_seq_length': 16,
-        'padding_file': 'black_images_code_2021-05-25.npz'
+        'max_frame_length': MAX_FRAME_LENGTH,
+        'vocab_size': VOCAB_SIZE,
     },
     'train_args': {
         'num_steps': 80000,  # we increase the batch size to reduce the steps

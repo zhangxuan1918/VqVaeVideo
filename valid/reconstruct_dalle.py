@@ -37,7 +37,7 @@ def reconstruct_with_dalle(x, encoder, decoder, do_preprocess=False):
     z = torch.argmax(z_logits, axis=1)
 
     print(f"DALL-E: latent shape: {z.shape}")
-    z = F.one_hot(z, num_classes=encoder.vocab_size).permute(0, 3, 1, 2).float()
+    z = F.one_hot(z, num_classes=encoder.VOCAB_SIZE).permute(0, 3, 1, 2).float()
 
     x_stats = decoder(z).float()
     x_rec = unmap_pixels(torch.sigmoid(x_stats[:, :3]))

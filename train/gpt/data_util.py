@@ -1,7 +1,7 @@
 import gzip
 import os
 from collections import Callable
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,8 +21,8 @@ class NumpyDataset(Dataset):
     def __init__(
             self,
             root_dir: str,
-            max_seq_length: int,
-            padding_file: str, # numpy file for black image code, we use it to pad in case the sequence length is small
+            max_frame_length: int,
+            vqvae_vocab_size: int,
             transform: Optional[Callable] = None
     ) -> None:
 
@@ -33,17 +33,13 @@ class NumpyDataset(Dataset):
 
         # for video codes, the np array has shape [#frame, 32, 32]
         # we only keep #max_seq_length frames
-        self.max_seq_length = max_seq_length
-
-        # if the #frame < #max_seq_length, we append padding
-        # padding is normally the code of black images after passing through vqvae for images
-        # padding shape [1, 32, 32]
-        self.padding = np.load(padding_file)['arr']
+        self.max_frame_length = max_frame_length
+        self.vqvae_vocab_size = vqvae_vocab_size
 
     def __len__(self):
         return len(self.numpy_files)
 
-    def __getitem__(self, idx: int) -> np.ndarray:
+    def __getitem__(self, idx: int) -> Tuple[np.ndarray, int]:
         if torch.is_tensor(idx):
             idx = idx.tolist()
 
@@ -51,14 +47,17 @@ class NumpyDataset(Dataset):
         with gzip.GzipFile(file_name, 'r') as f:
             codes = np.load(f).astype(np.long)
 
-        n = codes.shape[0]
-        if n < self.max_seq_length:
+        n, h, w = codes.shape
+        if n < self.max_frame_length:
             # pad more frames
-            pad = np.repeat(self.padding, self.max_seq_length - n, axis=0)
+            # if the #frame < #max_frame_length, we append padding
+            # we pad 8192 because vqvae has code 0 to 8191
+            padding = np.ones((1, h, w), dtype=codes.dtype) * self.vqvae_vocab_size
+            pad = np.repeat(padding, self.max_frame_length - n, axis=0)
             codes = np.concatenate([codes, pad], axis=0)
         # random sample
-        s = np.random.randint(0, n-self.max_seq_length+1)
-        codes = codes[s: s+self.max_seq_length]
+        s = np.random.randint(0, max(0, n - self.max_frame_length) + 1)
+        codes = codes[s: s+self.max_frame_length]
         if self.transform:
             codes = self.transform(codes)
         return codes
